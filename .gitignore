@@ -1,0 +1,4 @@
+.venv/
+__pycache__/
+moradia.db
+relatorio.html
