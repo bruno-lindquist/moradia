@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Moradia perto do Shopping Morumbi</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    /* Tema escuro */
+    body { font-family: -apple-system, Arial, sans-serif; margin: 24px;
+           color: #e6e6e6; background: #1a1d21; }
+    h1 { font-size: 22px; }
+    .controls { margin: 16px 0; }
+    select { font-size: 15px; padding: 6px 10px; background: #2a2e34; color: #e6e6e6;
+             border: 1px solid #444; border-radius: 4px; }
+    /* O wrapper e sticky (o Leaflet sobrescreve o position do #map interno, por isso
+       prendemos o container externo). O mapa "gruda" no topo ao rolar a lista. */
+    .map-wrap { position: sticky; top: 0; z-index: 500;
+                background: #1a1d21; padding-bottom: 12px; margin-bottom: 12px; }
+    #map { height: 360px; border-radius: 8px; }
+    table { border-collapse: collapse; width: 100%; font-size: 14px; }
+    th, td { padding: 8px 18px; border-bottom: 1px solid #333; text-align: left; }
+    /* thead sticky logo abaixo do mapa (360px), para os titulos seguirem visiveis */
+    thead th { position: sticky; top: 360px; z-index: 400; }
+    th { background: #2a2e34; cursor: pointer; user-select: none; white-space: nowrap; }
+    th:hover { background: #353a42; }
+    tbody tr:hover { background: #23272e; }
+    a { color: #5aa9ff; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .down { color: #4cd07d; font-weight: bold; }
+    .up { color: #ff6b5e; font-weight: bold; }
+    .stable, .new { color: #888; }
+    .deactivate { border: none; background: none; color: #ff6b5e; cursor: pointer;
+                  font-size: 15px; padding: 2px 6px; border-radius: 4px; }
+    .deactivate:hover { background: #3a2422; }
+    /* 5 estrelas de nota: cinza apagado por padrao, dourada quando preenchida */
+    .stars { white-space: nowrap; }
+    .star { color: #555; cursor: pointer; font-size: 16px; line-height: 1; }
+    .star.on { color: #ffc83d; }
+    .star:hover { color: #ffe08a; }
+    /* "visto" (botao direito): um traco no lugar das estrelas, so para marcar
+       que o imovel ja foi olhado, sem dar nota. Nao entra no score. */
+    .seen { color: #888; cursor: pointer; font-size: 16px; line-height: 1; }
+    .seen:hover { color: #bbb; }
+    /* linha de imovel bem avaliado (nota alta): fundo amarelo escuro */
+    tr.high-rating td { background: #332f1a; }
+    .count { font-size: 13px; font-weight: normal; color: #999; }
+    .footer { margin-top: 28px; font-size: 12px; color: #888; }
+    .pin-num { background: #2a2e34; color: #e6e6e6; border: 2px solid #888; border-radius: 50%;
+               width: 26px; height: 26px; line-height: 22px; text-align: center;
+               font-weight: bold; font-size: 12px; }
+    .pin-high-rating { border-width: 3px; box-shadow: 0 0 0 2px #ffc83d; }
+  </style>
+</head>
+<body>
+  <h1>🏠 Moradia perto do Shopping Morumbi</h1>
+
+  <div class="controls">
+    <strong>Aluguel</strong> (filtros aplicados na busca)
+    <span class="count" id="summary"></span>
+  </div>
+
+  <div class="map-wrap">
+    <div id="map"></div>
+  </div>
+
+  <table id="table">
+    <thead>
+      <tr>
+        <th></th><th>#</th><th>Score</th><th>Total</th><th>Distância</th>
+        <th>Quartos</th><th>Área</th><th>Vagas</th><th>Mobiliado</th><th>Andar</th><th>Pet</th><th>Variação</th><th>Endereço</th><th>Cód.</th><th></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <p class="footer">
+    Ordenado por custo-benefício (34% preço + 25% distância + 15% nota + 9% mobiliado +
+    9% vaga + 4% andar alto + 4% sem pet). Clique num cabeçalho para reordenar.
+    Imóveis sem coordenada não aparecem no mapa, mas continuam na tabela.
+    Gerado de moradia.db — rode <code>python collect.py</code> para atualizar.
+  </p>
+
+  <script>
+    const DATA = {{ data | tojson }};
+    const REFERENCE = DATA.reference;
+    const HIGHLIGHT_RATING = {{ highlight_rating }};  // nota a partir da qual destaca linha/pin
+
+    // Cor do pin conforme o score: verde (bom) -> amarelo -> vermelho (ruim)
+    function colorByScore(score) {
+      if (score >= 66) return '#1a8a3a';
+      if (score >= 33) return '#e0a800';
+      return '#c0392b';
+    }
+
+    function changeClass(text) {
+      if (text.startsWith('caiu')) return 'down';
+      if (text.startsWith('subiu')) return 'up';
+      if (text === 'novo') return 'new';
+      return 'stable';
+    }
+
+    // Cria um <td> com texto seguro (textContent). 'sortable' vai em data-value
+    // para a ordenacao usar o numero. 'tag' opcional embrulha o texto (ex.: strong).
+    function cell(text, sortable, tag) {
+      const td = document.createElement('td');
+      if (sortable !== undefined) td.dataset.value = sortable;
+      if (tag) {
+        const element = document.createElement(tag);
+        element.textContent = text;
+        td.appendChild(element);
+      } else {
+        td.textContent = text;
+      }
+      return td;
+    }
+
+    // --- Mapa ---
+    const map = L.map('map').setView([REFERENCE.lat, REFERENCE.lon], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap', maxZoom: 19
+    }).addTo(map);
+
+    // Pin do shopping (estrela vermelha grande)
+    L.marker([REFERENCE.lat, REFERENCE.lon], {
+      icon: L.divIcon({ html: '⭐', className: '', iconSize: [30, 30] })
+    }).addTo(map).bindPopup('<b>' + REFERENCE.name + '</b>');
+
+    let pinLayer = L.layerGroup().addTo(map);
+    let markers = {};   // indice da linha -> marcador, para o hover da tabela
+
+    // Escapa texto antes de injetar em HTML (defesa contra XSS no balao do mapa)
+    function esc(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function popup(property, position) {
+      const total = property.total_price != null
+        ? 'R$ ' + property.total_price.toLocaleString('pt-BR') + ' total'
+        : 'R$ ' + property.price.toLocaleString('pt-BR') + ' aluguel';
+      const furnished = property.furnished === 1 ? ' · mobiliado'
+                      : property.furnished === 0 ? ' · sem mobília' : '';
+      const floor = property.floor != null ? ' · ' + property.floor + 'º andar' : '';
+      const pet = property.accepts_pet === 0 ? ' · não aceita pet'
+                : property.accepts_pet === 1 ? ' · aceita pet' : '';
+      return '<b>#' + position + ' — score ' + property.score + '</b><br>' +
+             total + ' (' + property.price_per_m2 + '/m²)<br>' +
+             property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m², ' + property.parking + ' vaga(s)' + furnished + '<br>' +
+             property.distance_km + ' km do shopping' + floor + pet + '<br>' +
+             '<a href="' + esc(property.url) + '" target="_blank">ver anúncio ↗</a>';
+    }
+
+    // --- Renderizacao (mapa + tabela) para a operacao escolhida ---
+    function render(operation) {
+      const list = DATA[operation];
+      pinLayer.clearLayers();
+      markers = {};
+
+      // Pins no mapa (so quem tem coordenada)
+      const points = [[REFERENCE.lat, REFERENCE.lon]];
+      list.forEach(function (property, index) {
+        if (property.lat == null || property.lon == null) return;
+        const position = index + 1;
+        const highRating = (property.rating || 0) >= HIGHLIGHT_RATING;
+        const pinColor = highRating ? '#f5a623' : colorByScore(property.score);
+        const pinClass = 'pin-num' + (highRating ? ' pin-high-rating' : '');
+        const marker = L.marker([property.lat, property.lon], {
+          icon: L.divIcon({
+            className: '',
+            html: '<div class="' + pinClass + '" style="border-color:' + pinColor + '">' + position + '</div>',
+            iconSize: [26, 26]
+          })
+        }).bindPopup(popup(property, position));
+        pinLayer.addLayer(marker);
+        markers[index] = marker;
+        points.push([property.lat, property.lon]);
+      });
+      // Enquadra o mapa em todos os pontos
+      if (points.length > 1) map.fitBounds(points, { padding: [40, 40] });
+
+      // Tabela. Usamos textContent (nao innerHTML) para evitar XSS: assim,
+      // qualquer "<" vindo do endereco do site vira texto, nunca codigo executavel.
+      const body = document.querySelector('#table tbody');
+      body.replaceChildren();
+      list.forEach(function (property, index) {
+        const position = index + 1;
+        const tr = document.createElement('tr');
+
+        // Linha destacada se a nota for alta
+        if ((property.rating || 0) >= HIGHLIGHT_RATING) tr.classList.add('high-rating');
+
+        // 1a coluna: 5 estrelas de nota. Clicar na estrela N da nota N; clicar na
+        // estrela igual a nota atual zera (tira a nota).
+        const tdStars = document.createElement('td');
+        tdStars.className = 'stars';
+        buildStars(tdStars, property, tr);
+        tr.appendChild(tdStars);
+
+        tr.appendChild(cell(position, position));
+        tr.appendChild(cell(property.score, property.score, 'strong'));
+        // Total (valor cheio). Aluguel e R$/m2 nao sao mais exibidos.
+        const totalText = property.total_price != null
+          ? 'R$ ' + property.total_price.toLocaleString('pt-BR') : '—';
+        tr.appendChild(cell(totalText, property.total_price != null ? property.total_price : 0));
+        tr.appendChild(cell(property.distance_km + ' km', property.distance_km));
+        tr.appendChild(cell(property.bedrooms, property.bedrooms));
+        tr.appendChild(cell(property.area_m2 + ' m²', property.area_m2));
+        // vaga: so mostra se tiver 1+ (0 -> vazio)
+        tr.appendChild(cell(property.parking >= 1 ? property.parking : '', property.parking));
+        // mobiliado: so mostra "Sim" (positivo); nao/desconhecido -> vazio
+        tr.appendChild(cell(property.furnished === 1 ? 'Sim' : '', property.furnished === 1 ? 1 : 0));
+        // andar: so mostra se for 4o ou acima (positivo); abaixo/desconhecido -> vazio
+        const goodFloor = property.floor != null && property.floor >= 4;
+        tr.appendChild(cell(goodFloor ? property.floor + 'º' : '', property.floor != null ? property.floor : -1));
+        // pet: so mostra "Não" (positivo p/ o usuario); sim/desconhecido -> vazio
+        tr.appendChild(cell(property.accepts_pet === 0 ? 'Não' : '', property.accepts_pet === 0 ? 1 : 0));
+        // variacao: so mostra se mudou (subiu/caiu); estavel/novo -> vazio
+        const changed = property.change.startsWith('subiu') || property.change.startsWith('caiu');
+        const tdChange = cell(changed ? property.change : '');
+        if (changed) tdChange.className = changeClass(property.change);
+        tr.appendChild(tdChange);
+
+        const tdAddress = document.createElement('td');
+        const link = document.createElement('a');
+        link.href = property.url;
+        link.target = '_blank';
+        link.textContent = property.address;   // sem seta; textContent evita XSS
+        tdAddress.appendChild(link);
+        tr.appendChild(tdAddress);
+
+        // Codigo do imovel (ID do QuintoAndar), como link para o anuncio
+        const tdCode = document.createElement('td');
+        const codeLink = document.createElement('a');
+        codeLink.href = property.url;
+        codeLink.target = '_blank';
+        codeLink.textContent = property.id;   // textContent evita XSS
+        tdCode.appendChild(codeLink);
+        tr.appendChild(tdCode);
+
+        // Ultima coluna: botao de desativar (esconder). textContent evita XSS.
+        const tdButton = document.createElement('td');
+        const button = document.createElement('button');
+        button.className = 'deactivate';
+        button.textContent = '✕';
+        button.title = 'Não tenho interesse — esconder este anúncio';
+        button.addEventListener('click', function () {
+          deactivate(property.id, tr, markers[index]);
+        });
+        tdButton.appendChild(button);
+        tr.appendChild(tdButton);
+
+        // Hover na linha destaca o pin correspondente
+        tr.addEventListener('mouseenter', function () {
+          if (markers[index]) markers[index].openPopup();
+        });
+        body.appendChild(tr);
+      });
+
+      const withoutCoord = list.filter(function (p) { return p.lat == null; }).length;
+      document.getElementById('summary').textContent =
+        list.length + ' imóveis' + (withoutCoord ? ' (' + withoutCoord + ' sem coordenada, fora do mapa)' : '');
+    }
+
+    // --- Ordenacao por coluna ---
+    document.querySelectorAll('#table th').forEach(function (header, index) {
+      header.addEventListener('click', function () {
+        const body = document.querySelector('#table tbody');
+        const rows = Array.from(body.querySelectorAll('tr'));
+        const ascending = header.dataset.order !== 'asc';
+        header.dataset.order = ascending ? 'asc' : 'desc';
+        rows.sort(function (a, b) {
+          const va = a.children[index].dataset.value;
+          const vb = b.children[index].dataset.value;
+          let cmp = (va !== undefined && vb !== undefined)
+            ? parseFloat(va) - parseFloat(vb)
+            : a.children[index].textContent.localeCompare(b.children[index].textContent);
+          return ascending ? cmp : -cmp;
+        });
+        rows.forEach(function (row) { body.appendChild(row); });
+      });
+    });
+
+    // Desativa um anuncio: avisa o servidor (grava ativo=0) e some com a linha + pin.
+    function deactivate(id, tr, marker) {
+      fetch('/deactivate/' + id, { method: 'POST' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('falha');
+          tr.remove();
+          if (marker) pinLayer.removeLayer(marker);
+        })
+        .catch(function () {
+          alert('Nao foi possivel desativar. O servidor (app.py) esta rodando?');
+        });
+    }
+
+    // Desenha as estrelas (ou o traco de "visto") refletindo property.rating e liga os cliques.
+    // rating -1 = visto (traco); 0 = sem nada; 1..5 = estrelas.
+    function buildStars(td, property, tr) {
+      td.replaceChildren();
+
+      // Estado "visto": mostra so um traco. Botao direito de novo volta ao vazio.
+      if (property.rating === -1) {
+        const dash = document.createElement('span');
+        dash.className = 'seen';
+        dash.textContent = '–';
+        dash.title = 'Visto (sem nota). Botão direito para desmarcar.';
+        dash.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          setRating(property, 0, td, tr);  // desmarca: volta ao vazio
+        });
+        td.appendChild(dash);
+        return;
+      }
+
+      for (let n = 1; n <= 5; n++) {
+        const star = document.createElement('span');
+        star.className = 'star' + (n <= (property.rating || 0) ? ' on' : '');
+        star.textContent = n <= (property.rating || 0) ? '★' : '☆';
+        star.title = 'Dar nota ' + n + ' (botão direito = marcar como visto)';
+        star.addEventListener('click', function () {
+          // clicar na estrela igual a nota atual zera; senao, vira a nota clicada
+          const newRating = property.rating === n ? 0 : n;
+          setRating(property, newRating, td, tr);
+        });
+        // Botao direito marca "visto" -- mas so quando ainda nao tem nota (regra 3b).
+        star.addEventListener('contextmenu', function (e) {
+          e.preventDefault();
+          if (!property.rating) setRating(property, -1, td, tr);
+        });
+        td.appendChild(star);
+      }
+    }
+
+    // Grava a nota no servidor e atualiza estrelas + destaque da linha.
+    function setRating(property, rating, td, tr) {
+      fetch('/rate/' + property.id + '/' + rating, { method: 'POST' })
+        .then(function (response) {
+          if (!response.ok) throw new Error('falha');
+          return response.json();
+        })
+        .then(function (result) {
+          property.rating = result.rating;
+          buildStars(td, property, tr);
+          tr.classList.toggle('high-rating', property.rating >= HIGHLIGHT_RATING);
+        })
+        .catch(function () {
+          alert('Nao foi possivel salvar a nota. O servidor (app.py) esta rodando?');
+        });
+    }
+
+    render('rentals');
+  </script>
+</body>
+</html>

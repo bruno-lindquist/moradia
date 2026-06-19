@@ -1,5 +1,9 @@
 # Camada de banco de dados (SQLite puro, sem ORM).
 # Duas tabelas: imoveis (dados estaveis) e precos (um snapshot por execucao).
+#
+# Convencao de idioma: os identificadores SQL (tabelas/colunas) estao em portugues
+# porque vivem dentro do banco real (moradia.db). O codigo Python em volta esta em
+# ingles. A traducao ingles->portugues acontece so na fronteira com o SQL.
 
 import sqlite3
 from datetime import datetime
@@ -7,15 +11,15 @@ from datetime import datetime
 import config
 
 
-def conectar():
-    # row_factory=Row permite acessar colunas pelo nome (linha["preco"]) em vez de indice
-    conexao = sqlite3.connect(config.DB_PATH)
-    conexao.row_factory = sqlite3.Row
-    return conexao
+def connect():
+    # row_factory=Row permite acessar colunas pelo nome (row["preco"]) em vez de indice
+    connection = sqlite3.connect(config.DB_PATH)
+    connection.row_factory = sqlite3.Row
+    return connection
 
 
-def criar_tabelas(conexao):
-    conexao.executescript(
+def create_tables(connection):
+    connection.executescript(
         """
         CREATE TABLE IF NOT EXISTS imoveis (
             id            TEXT PRIMARY KEY,
@@ -62,51 +66,51 @@ def criar_tabelas(conexao):
         );
         """
     )
-    _semear_bairros(conexao)
-    _migrar_colunas_imoveis(conexao)
-    conexao.commit()
+    _seed_neighborhoods(connection)
+    _migrate_property_columns(connection)
+    connection.commit()
 
 
-def _migrar_colunas_imoveis(conexao):
+def _migrate_property_columns(connection):
     # Bancos criados antes destas colunas nao as tem. ALTER TABLE so adiciona a coluna
     # (nao apaga nada). Idempotente: so age se a coluna ainda nao existir.
-    colunas = [linha["name"] for linha in conexao.execute("PRAGMA table_info(imoveis)")]
-    if "ativo" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1")
-    if "preferido" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN preferido INTEGER NOT NULL DEFAULT 0")
-    if "mobiliado" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN mobiliado INTEGER")
-    if "andar" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN andar INTEGER")
-    if "aceita_pet" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN aceita_pet INTEGER")
-    if "detalhado" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN detalhado INTEGER NOT NULL DEFAULT 0")
-    if "nota" not in colunas:
-        conexao.execute("ALTER TABLE imoveis ADD COLUMN nota INTEGER NOT NULL DEFAULT 0")
+    columns = [row["name"] for row in connection.execute("PRAGMA table_info(imoveis)")]
+    if "ativo" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1")
+    if "preferido" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN preferido INTEGER NOT NULL DEFAULT 0")
+    if "mobiliado" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN mobiliado INTEGER")
+    if "andar" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN andar INTEGER")
+    if "aceita_pet" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN aceita_pet INTEGER")
+    if "detalhado" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN detalhado INTEGER NOT NULL DEFAULT 0")
+    if "nota" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN nota INTEGER NOT NULL DEFAULT 0")
         # converte preferidos existentes em nota 5 (nao perde as escolhas ja feitas)
-        conexao.execute("UPDATE imoveis SET nota = 5 WHERE preferido = 1")
+        connection.execute("UPDATE imoveis SET nota = 5 WHERE preferido = 1")
 
 
-def desativar_imovel(conexao, imovel_id):
+def deactivate_property(connection, property_id):
     # Marca o imovel como inativo (some do relatorio). Nao apaga nada.
-    conexao.execute("UPDATE imoveis SET ativo = 0 WHERE id = ?", (imovel_id,))
-    conexao.commit()
+    connection.execute("UPDATE imoveis SET ativo = 0 WHERE id = ?", (property_id,))
+    connection.commit()
 
 
-def definir_nota(conexao, imovel_id, nota):
+def set_rating(connection, property_id, rating):
     # Define a nota do imovel. Valores: -1 = "visto" (so um traco, sem estrela),
     # 0 = sem nota nenhuma, 1 a 5 = estrelas. Retorna a nota gravada.
-    nota = max(-1, min(5, int(nota)))  # garante -1..5
-    conexao.execute("UPDATE imoveis SET nota = ? WHERE id = ?", (nota, imovel_id))
-    conexao.commit()
-    return nota
+    rating = max(-1, min(5, int(rating)))  # garante -1..5
+    connection.execute("UPDATE imoveis SET nota = ? WHERE id = ?", (rating, property_id))
+    connection.commit()
+    return rating
 
 
 # Bairros iniciais (regiao do Brooklin/Campo Belo + vizinhos). Sao repostos se o banco
 # for recriado. Para adicionar mais, inclua aqui (e/ou faca INSERT direto na tabela).
-_BAIRROS_INICIAIS = [
+_INITIAL_NEIGHBORHOODS = [
     ("jardim-das-acacias", "Jardim das Acácias"),
     ("brooklin", "Brooklin"),
     ("campo-belo", "Campo Belo"),
@@ -122,34 +126,36 @@ _BAIRROS_INICIAIS = [
 ]
 
 
-def _semear_bairros(conexao):
+def _seed_neighborhoods(connection):
     # So insere se a tabela estiver vazia (nao sobrescreve ajustes seus depois).
-    vazia = conexao.execute("SELECT COUNT(*) FROM bairros").fetchone()[0] == 0
-    if vazia:
-        conexao.executemany(
-            "INSERT INTO bairros (slug, nome) VALUES (?, ?)", _BAIRROS_INICIAIS
+    is_empty = connection.execute("SELECT COUNT(*) FROM bairros").fetchone()[0] == 0
+    if is_empty:
+        connection.executemany(
+            "INSERT INTO bairros (slug, nome) VALUES (?, ?)", _INITIAL_NEIGHBORHOODS
         )
 
 
-def ids_detalhados(conexao):
+def detailed_ids(connection):
     # Conjunto de IDs cujos detalhes (mobilia/andar/pet/vagas) ja foram capturados.
     # O scraper usa isso para nao reabrir a pagina desses imoveis.
-    linhas = conexao.execute("SELECT id FROM imoveis WHERE detalhado = 1").fetchall()
-    return {linha["id"] for linha in linhas}
+    rows = connection.execute("SELECT id FROM imoveis WHERE detalhado = 1").fetchall()
+    return {row["id"] for row in rows}
 
 
-def bairros_ativos(conexao):
+def active_neighborhoods(connection):
     # Retorna lista de (slug, nome) dos bairros marcados como ativos.
-    linhas = conexao.execute(
+    rows = connection.execute(
         "SELECT slug, nome FROM bairros WHERE ativo = 1 ORDER BY nome"
     ).fetchall()
-    return [(linha["slug"], linha["nome"]) for linha in linhas]
+    return [(row["slug"], row["nome"]) for row in rows]
 
 
-def salvar_imovel(conexao, imovel, agora):
+def save_property(connection, property, now):
     # Upsert: insere o imovel; se ja existir, atualiza os dados que podem ter mudado.
     # primeira_vez so e gravado na 1a vez (ON CONFLICT preserva o valor antigo).
-    conexao.execute(
+    # As chaves do dict 'property' estao em ingles; o mapeamento abaixo faz a ponte
+    # ingles->portugues para os parametros nomeados do SQL.
+    connection.execute(
         """
         INSERT INTO imoveis (id, operacao, titulo, endereco, area_m2,
                              quartos, vagas, url, latitude, longitude, distancia_km,
@@ -175,38 +181,38 @@ def salvar_imovel(conexao, imovel, agora):
             distancia_km = excluded.distancia_km
         """,
         {
-            "id": imovel["id"],
-            "operacao": imovel["operacao"],
-            "titulo": imovel.get("titulo"),
-            "endereco": imovel.get("endereco"),
-            "area_m2": imovel.get("area_m2"),
-            "quartos": imovel.get("quartos"),
-            "vagas": imovel.get("vagas"),
-            "url": imovel.get("url"),
-            "latitude": imovel.get("latitude"),
-            "longitude": imovel.get("longitude"),
-            "distancia_km": imovel.get("distancia_km"),
-            "mobiliado": imovel.get("mobiliado"),
-            "andar": imovel.get("andar"),
-            "aceita_pet": imovel.get("aceita_pet"),
-            "detalhado": 1 if imovel.get("detalhado") else 0,
-            "primeira_vez": agora,
+            "id": property["id"],
+            "operacao": property["operation"],
+            "titulo": property.get("title"),
+            "endereco": property.get("address"),
+            "area_m2": property.get("area_m2"),
+            "quartos": property.get("bedrooms"),
+            "vagas": property.get("parking"),
+            "url": property.get("url"),
+            "latitude": property.get("latitude"),
+            "longitude": property.get("longitude"),
+            "distancia_km": property.get("distance_km"),
+            "mobiliado": property.get("furnished"),
+            "andar": property.get("floor"),
+            "aceita_pet": property.get("accepts_pet"),
+            "detalhado": 1 if property.get("detailed") else 0,
+            "primeira_vez": now,
         },
     )
 
 
-def salvar_preco(conexao, imovel_id, valor, valor_total, agora):
+def save_price(connection, property_id, value, total_value, now):
     # Sempre INSERT: cada execucao deixa um snapshot, formando o historico.
-    conexao.execute(
+    connection.execute(
         "INSERT INTO precos (imovel_id, valor, valor_total, coletado_em) VALUES (?, ?, ?, ?)",
-        (imovel_id, valor, valor_total, agora),
+        (property_id, value, total_value, now),
     )
 
 
-def imovel_ja_existe(conexao, imovel_id):
-    cursor = conexao.execute("SELECT 1 FROM imoveis WHERE id = ?", (imovel_id,))
+def property_exists(connection, property_id):
+    cursor = connection.execute("SELECT 1 FROM imoveis WHERE id = ?", (property_id,))
     return cursor.fetchone() is not None
 
 
-def agora_iso():
+def now_iso():
     return datetime.now().isoformat(timespec="seconds")

@@ -65,7 +65,7 @@ São só dois passos no dia a dia:
 **1. Buscar os imóveis** (atualiza os preços):
 
 ```
-python coletar.py
+python collect.py
 ```
 
 Ele vai na internet, busca os apartamentos e guarda tudo. Um navegador (Chrome) vai abrir
@@ -85,9 +85,8 @@ Depois abra o navegador e acesse: **http://localhost:8765**
 
 Para parar o relatório, volte ao terminal e aperte **Ctrl + C**.
 
-> Existem ainda dois comandos extras, opcionais: `python analisar.py` mostra o ranking
-> direto no terminal (sem mapa), e `python relatorio.py` gera uma página simples sem os
-> botões interativos. Para o uso normal, **`python app.py` é o principal**.
+> Existe ainda um comando extra, opcional: `python ranking.py` mostra o ranking direto no
+> terminal (sem mapa). Para o uso normal, **`python app.py` é o principal**.
 
 ---
 
@@ -106,7 +105,7 @@ essa nota juntando 7 características, cada uma com um peso:
 | **4%** | Fica no 4º andar ou acima? | se for andar alto |
 | **4%** | NÃO aceita pet? | se não aceitar pet |
 
-> Os pesos podem ser alterados no arquivo `analisar.py`, caso você queira valorizar mais
+> Os pesos podem ser alterados no arquivo `ranking.py`, caso você queira valorizar mais
 > o preço, a distância, etc.
 
 ---
@@ -152,10 +151,10 @@ um pode ser ligado ou desligado.
 ## O que tem em cada arquivo
 
 - `config.py` — as configurações (faixa de preço, distância, ponto de referência)
-- `coletar.py` — comando que faz a busca dos imóveis na internet
+- `collect.py` — comando que faz a busca dos imóveis na internet
 - `app.py` — comando que abre o relatório interativo no navegador
-- `analisar.py` — mostra o ranking no terminal (e contém o cálculo do score)
-- `relatorio.py` — gera a página de relatório
+- `report.html` — a página do relatório (mapa + tabela); usada pelo `app.py`
+- `ranking.py` — mostra o ranking no terminal (e contém o cálculo do score)
 - `scraper.py` — a parte que lê os anúncios do site QuintoAndar
 - `geo.py` — descobre as coordenadas dos endereços e calcula a distância
-- `db.py` — cuida do banco de dados (o arquivo `moradia.db`)
+- `database.py` — cuida do banco de dados (o arquivo `moradia.db`)
