@@ -6,53 +6,80 @@
   <title>Moradia perto do Shopping Morumbi</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <!-- Plugin de clustering: agrupa pins proximos num circulo com a contagem -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"
+        integrity="sha384-pmjIAcz2bAn0xukfxADbZIb3t8oRT9Sv0rvO+BR5Csr6Dhqq+nZs59P0pPKQJkEV" crossorigin="anonymous">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"
+        integrity="sha384-wgw+aLYNQ7dlhK47ZPK7FRACiq7ROZwgFNg0m04avm4CaXS+Z9Y7nMu8yNjBKYC+" crossorigin="anonymous">
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
           integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"
+          integrity="sha384-eXVCORTRlv4FUUgS/xmOyr66XBVraen8ATNLMESp92FKXLAMiKkerixTiBvXriZr" crossorigin="anonymous"></script>
   <style>
-    /* Tema escuro */
+    /* Tema escuro "Slate quase preto": fundos quase pretos com leve tom azulado;
+       o azul (#4a9eff) fica reservado para acentos (links, foco, linha clicada). */
     body { font-family: -apple-system, Arial, sans-serif; margin: 24px;
-           color: #e6e6e6; background: #1a1d21; }
+           color: #e9edf2; background: #0c0e12; }
     h1 { font-size: 22px; }
     .controls { margin: 16px 0; }
-    select { font-size: 15px; padding: 6px 10px; background: #2a2e34; color: #e6e6e6;
-             border: 1px solid #444; border-radius: 4px; }
-    /* O wrapper e sticky (o Leaflet sobrescreve o position do #map interno, por isso
-       prendemos o container externo). O mapa "gruda" no topo ao rolar a lista. */
-    .map-wrap { position: sticky; top: 0; z-index: 500;
-                background: #1a1d21; padding-bottom: 12px; margin-bottom: 12px; }
-    #map { height: 360px; border-radius: 8px; }
+    /* Barra de filtros: checkboxes em linha para estreitar a lista */
+    .filters { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+               font-size: 14px; color: #9aa3b2; }
+    .filters label { cursor: pointer; user-select: none; }
+    .filters input { cursor: pointer; vertical-align: middle; margin-right: 4px;
+                     accent-color: #4a9eff; }
+    /* Wrapper sticky: prende o mapa no topo ao rolar a lista. Fica num container
+       externo porque o Leaflet sobrescreve o position do #map interno.
+       z-index 500 > 400 do cabecalho: o cabecalho passa POR BAIXO do mapa ao rolar. */
+    .map-wrap { position: sticky; top: 0; z-index: 500; background: #0c0e12;
+                padding-bottom: 12px; margin-bottom: 12px; }
+    #map { height: 550px; border-radius: 8px; }
     table { border-collapse: collapse; width: 100%; font-size: 14px; }
-    th, td { padding: 8px 18px; border-bottom: 1px solid #333; text-align: left; }
-    /* thead sticky logo abaixo do mapa (360px), para os titulos seguirem visiveis */
-    thead th { position: sticky; top: 360px; z-index: 400; }
-    th { background: #2a2e34; cursor: pointer; user-select: none; white-space: nowrap; }
-    th:hover { background: #353a42; }
-    tbody tr:hover { background: #23272e; }
-    a { color: #5aa9ff; text-decoration: none; }
+    th, td { padding: 8px 14px; border-bottom: 1px solid #1f232c; text-align: left; }
+    /* Cabecalho fixo logo ABAIXO do mapa (top = altura do mapa) ao rolar a lista */
+    thead th { position: sticky; top: 550px; z-index: 400; }
+    th { background: #191d25; cursor: pointer; user-select: none; white-space: nowrap;
+         color: #aab3c2; }
+    th:hover { background: #232936; }
+    /* Hover na linha: realce claro, com !important para vencer a linha amarela de nota alta */
+    tbody tr:hover td { background: #242a36 !important; }
+    a { color: #4a9eff; text-decoration: none; }
     a:hover { text-decoration: underline; }
-    .down { color: #4cd07d; font-weight: bold; }
-    .up { color: #ff6b5e; font-weight: bold; }
-    .stable, .new { color: #888; }
-    .deactivate { border: none; background: none; color: #ff6b5e; cursor: pointer;
+    .down { color: #3fc97e; font-weight: bold; }
+    .up { color: #e0625a; font-weight: bold; }
+    .stable, .new { color: #6b7280; }
+    .deactivate { border: none; background: none; color: #e0625a; cursor: pointer;
                   font-size: 15px; padding: 2px 6px; border-radius: 4px; }
-    .deactivate:hover { background: #3a2422; }
+    .deactivate:hover { background: #2e1c1a; }
     /* 5 estrelas de nota: cinza apagado por padrao, dourada quando preenchida */
     .stars { white-space: nowrap; }
-    .star { color: #555; cursor: pointer; font-size: 16px; line-height: 1; }
-    .star.on { color: #ffc83d; }
+    .star { color: #4a515f; cursor: pointer; font-size: 16px; line-height: 1; }
+    .star.on { color: #ffcf4d; }
     .star:hover { color: #ffe08a; }
     /* "visto" (botao direito): um traco no lugar das estrelas, so para marcar
        que o imovel ja foi olhado, sem dar nota. Nao entra no score. */
-    .seen { color: #888; cursor: pointer; font-size: 16px; line-height: 1; }
-    .seen:hover { color: #bbb; }
-    /* linha de imovel bem avaliado (nota alta): fundo amarelo escuro */
-    tr.high-rating td { background: #332f1a; }
-    .count { font-size: 13px; font-weight: normal; color: #999; }
-    .footer { margin-top: 28px; font-size: 12px; color: #888; }
-    .pin-num { background: #2a2e34; color: #e6e6e6; border: 2px solid #888; border-radius: 50%;
+    .seen { color: #6b7280; cursor: pointer; font-size: 16px; line-height: 1; }
+    .seen:hover { color: #aab3c2; }
+    /* linha de imovel bem avaliado (nota alta): fundo ambar escuro */
+    tr.high-rating td { background: #26210f; }
+    /* ultima linha cujo link foi clicado: faixa azul a esquerda (o link abre outra aba,
+       isto marca de onde voce saiu para nao se perder ao voltar) */
+    tr.last-clicked td:first-child { box-shadow: inset 4px 0 0 #4a9eff; }
+    /* coluna "Extras": icones de mobilia/andar/pet/vaga, so quando positivo */
+    .extras { white-space: nowrap; font-size: 14px; }
+    .extras span { margin-right: 6px; }
+    .count { font-size: 13px; font-weight: normal; color: #6b7280; }
+    .footer { margin-top: 28px; font-size: 12px; color: #6b7280; }
+    .pin-num { background: #191d25; color: #e9edf2; border: 2px solid #6b7280; border-radius: 50%;
                width: 26px; height: 26px; line-height: 22px; text-align: center;
                font-weight: bold; font-size: 12px; }
-    .pin-high-rating { border-width: 3px; box-shadow: 0 0 0 2px #ffc83d; }
+    .pin-high-rating { border-width: 3px; box-shadow: 0 0 0 2px #ffcf4d; }
+    /* Toast: aviso curto no canto inferior que aparece e some sozinho */
+    #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+             background: #191d25; color: #e9edf2; padding: 10px 18px; border-radius: 6px;
+             border: 1px solid #2a2f3a; font-size: 14px; opacity: 0; pointer-events: none;
+             transition: opacity 0.25s; z-index: 1000; }
+    #toast.show { opacity: 1; }
   </style>
 </head>
 <body>
@@ -63,6 +90,14 @@
     <span class="count" id="summary"></span>
   </div>
 
+  <!-- Filtros client-side: estreitam a lista e os pins sem recarregar a pagina -->
+  <div class="filters">
+    <label><input type="checkbox" id="f-parking"> Só com vaga</label>
+    <label><input type="checkbox" id="f-furnished"> Só mobiliado</label>
+    <label><input type="checkbox" id="f-rated"> Só com nota</label>
+    <label><input type="checkbox" id="f-hide-seen"> Esconder vistos</label>
+  </div>
+
   <div class="map-wrap">
     <div id="map"></div>
   </div>
@@ -71,7 +106,7 @@
     <thead>
       <tr>
         <th></th><th>#</th><th>Score</th><th>Total</th><th>Distância</th>
-        <th>Quartos</th><th>Área</th><th>Vagas</th><th>Mobiliado</th><th>Andar</th><th>Pet</th><th>Variação</th><th>Endereço</th><th>Cód.</th><th></th>
+        <th>Quartos</th><th>Área</th><th></th><th></th><th></th><th></th><th>Variação</th><th style="width: 350px;">Endereço</th><th>Cód.</th><th></th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -80,20 +115,24 @@
   <p class="footer">
     Ordenado por custo-benefício (34% preço + 25% distância + 15% nota + 9% mobiliado +
     9% vaga + 4% andar alto + 4% sem pet). Clique num cabeçalho para reordenar.
-    Imóveis sem coordenada não aparecem no mapa, mas continuam na tabela.
+    Colunas de ícone: 🅿️ vaga · 🛋️ mobiliado · ↑ andar 4º+ · 🚫🐾 não aceita pet.
     Gerado de moradia.db — rode <code>python collect.py</code> para atualizar.
   </p>
+
+  <div id="toast"></div>
 
   <script>
     const DATA = {{ data | tojson }};
     const REFERENCE = DATA.reference;
     const HIGHLIGHT_RATING = {{ highlight_rating }};  // nota a partir da qual destaca linha/pin
+    const LAST_CLICKED_KEY = 'moradia-ultima-linha-clicada';  // id salvo no localStorage
 
-    // Cor do pin conforme o score: verde (bom) -> amarelo -> vermelho (ruim)
+    // Cor do pin conforme o score: verde (bom) -> ambar -> vermelho (ruim).
+    // Mesmas cores de acento da paleta (verde/ambar/vermelho do tema).
     function colorByScore(score) {
-      if (score >= 66) return '#1a8a3a';
-      if (score >= 33) return '#e0a800';
-      return '#c0392b';
+      if (score >= 66) return '#3fc97e';
+      if (score >= 33) return '#e0a92e';
+      return '#e0625a';
     }
 
     function changeClass(text) {
@@ -101,6 +140,16 @@
       if (text.startsWith('subiu')) return 'up';
       if (text === 'novo') return 'new';
       return 'stable';
+    }
+
+    // Mostra um aviso curto que some sozinho depois de ~2s
+    let toastTimer = null;
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(function () { toast.classList.remove('show'); }, 2000);
     }
 
     // Cria um <td> com texto seguro (textContent). 'sortable' vai em data-value
@@ -129,7 +178,8 @@
       icon: L.divIcon({ html: '⭐', className: '', iconSize: [30, 30] })
     }).addTo(map).bindPopup('<b>' + REFERENCE.name + '</b>');
 
-    let pinLayer = L.layerGroup().addTo(map);
+    // markerClusterGroup agrupa pins proximos (resolve o amontoado do Brooklin/Campo Belo)
+    let pinLayer = L.markerClusterGroup({ maxClusterRadius: 45 }).addTo(map);
     let markers = {};   // indice da linha -> marcador, para o hover da tabela
 
     // Escapa texto antes de injetar em HTML (defesa contra XSS no balao do mapa)
@@ -155,9 +205,40 @@
              '<a href="' + esc(property.url) + '" target="_blank">ver anúncio ↗</a>';
     }
 
-    // --- Renderizacao (mapa + tabela) para a operacao escolhida ---
-    function render(operation) {
-      const list = DATA[operation];
+    // Celula de "extra": mostra o icone so quando positivo (senao fica vazia).
+    // 'sortValue' (0/1 ou o numero) permite ordenar a coluna pelo cabecalho.
+    function extraCell(icon, title, positive, sortValue) {
+      const td = document.createElement('td');
+      td.className = 'extras';
+      if (positive) {
+        const span = document.createElement('span');
+        span.textContent = icon;
+        span.title = title;
+        td.appendChild(span);
+      }
+      td.dataset.value = sortValue;
+      return td;
+    }
+
+    // Aplica os filtros (checkboxes) sobre a lista completa. Retorna so o que passa.
+    function getFiltered() {
+      const onlyParking = document.getElementById('f-parking').checked;
+      const onlyFurnished = document.getElementById('f-furnished').checked;
+      const onlyRated = document.getElementById('f-rated').checked;
+      const hideSeen = document.getElementById('f-hide-seen').checked;
+      return DATA.rentals.filter(function (property) {
+        if (onlyParking && !(property.parking >= 1)) return false;
+        if (onlyFurnished && property.furnished !== 1) return false;
+        if (onlyRated && !(property.rating >= 1)) return false;
+        if (hideSeen && property.rating === -1) return false;
+        return true;
+      });
+    }
+
+    // --- Renderizacao (mapa + tabela) a partir da lista filtrada ---
+    function render() {
+      const list = getFiltered();
+      const lastClicked = localStorage.getItem(LAST_CLICKED_KEY);
       pinLayer.clearLayers();
       markers = {};
 
@@ -167,7 +248,7 @@
         if (property.lat == null || property.lon == null) return;
         const position = index + 1;
         const highRating = (property.rating || 0) >= HIGHLIGHT_RATING;
-        const pinColor = highRating ? '#f5a623' : colorByScore(property.score);
+        const pinColor = highRating ? '#ffcf4d' : colorByScore(property.score);
         const pinClass = 'pin-num' + (highRating ? ' pin-high-rating' : '');
         const marker = L.marker([property.lat, property.lon], {
           icon: L.divIcon({
@@ -193,6 +274,8 @@
 
         // Linha destacada se a nota for alta
         if ((property.rating || 0) >= HIGHLIGHT_RATING) tr.classList.add('high-rating');
+        // Marca a ultima linha cujo link foi clicado (persistida no localStorage)
+        if (lastClicked && property.id === lastClicked) tr.classList.add('last-clicked');
 
         // 1a coluna: 5 estrelas de nota. Clicar na estrela N da nota N; clicar na
         // estrela igual a nota atual zera (tira a nota).
@@ -203,25 +286,24 @@
 
         tr.appendChild(cell(position, position));
         tr.appendChild(cell(property.score, property.score, 'strong'));
-        // Total (valor cheio). Aluguel e R$/m2 nao sao mais exibidos.
+        // Total (valor cheio).
         const totalText = property.total_price != null
           ? 'R$ ' + property.total_price.toLocaleString('pt-BR') : '—';
         tr.appendChild(cell(totalText, property.total_price != null ? property.total_price : 0));
         tr.appendChild(cell(property.distance_km + ' km', property.distance_km));
         tr.appendChild(cell(property.bedrooms, property.bedrooms));
         tr.appendChild(cell(property.area_m2 + ' m²', property.area_m2));
-        // vaga: so mostra se tiver 1+ (0 -> vazio)
-        tr.appendChild(cell(property.parking >= 1 ? property.parking : '', property.parking));
-        // mobiliado: so mostra "Sim" (positivo); nao/desconhecido -> vazio
-        tr.appendChild(cell(property.furnished === 1 ? 'Sim' : '', property.furnished === 1 ? 1 : 0));
-        // andar: so mostra se for 4o ou acima (positivo); abaixo/desconhecido -> vazio
+        // Extras em colunas separadas (sem titulo no cabecalho), so o icone quando positivo
+        tr.appendChild(extraCell('🅿️', property.parking + ' vaga(s)', property.parking >= 1, property.parking));
+        tr.appendChild(extraCell('🛋️', 'Mobiliado', property.furnished === 1, property.furnished === 1 ? 1 : 0));
         const goodFloor = property.floor != null && property.floor >= 4;
-        tr.appendChild(cell(goodFloor ? property.floor + 'º' : '', property.floor != null ? property.floor : -1));
-        // pet: so mostra "Não" (positivo p/ o usuario); sim/desconhecido -> vazio
-        tr.appendChild(cell(property.accepts_pet === 0 ? 'Não' : '', property.accepts_pet === 0 ? 1 : 0));
-        // variacao: so mostra se mudou (subiu/caiu); estavel/novo -> vazio
+        tr.appendChild(extraCell('↑' + property.floor, 'Andar ' + property.floor + 'º', goodFloor, property.floor != null ? property.floor : -1));
+        tr.appendChild(extraCell('🚫🐾', 'Não aceita pet', property.accepts_pet === 0, property.accepts_pet === 0 ? 1 : 0));
+        // variacao: seta + valor (↓ caiu / ↑ subiu); estavel/novo -> vazio
         const changed = property.change.startsWith('subiu') || property.change.startsWith('caiu');
-        const tdChange = cell(changed ? property.change : '');
+        const arrow = property.change.startsWith('caiu') ? '↓' : '↑';
+        const value = property.change.replace(/^(caiu|subiu)\s*/, '');  // "caiu R$ 250" -> "R$ 250"
+        const tdChange = cell(changed ? arrow + ' ' + value : '');
         if (changed) tdChange.className = changeClass(property.change);
         tr.appendChild(tdChange);
 
@@ -230,6 +312,7 @@
         link.href = property.url;
         link.target = '_blank';
         link.textContent = property.address;   // sem seta; textContent evita XSS
+        link.addEventListener('click', function () { markClicked(property.id); });
         tdAddress.appendChild(link);
         tr.appendChild(tdAddress);
 
@@ -239,6 +322,7 @@
         codeLink.href = property.url;
         codeLink.target = '_blank';
         codeLink.textContent = property.id;   // textContent evita XSS
+        codeLink.addEventListener('click', function () { markClicked(property.id); });
         tdCode.appendChild(codeLink);
         tr.appendChild(tdCode);
 
@@ -261,9 +345,20 @@
         body.appendChild(tr);
       });
 
+      const total = DATA.rentals.length;
+      const visible = list.length;
       const withoutCoord = list.filter(function (p) { return p.lat == null; }).length;
-      document.getElementById('summary').textContent =
-        list.length + ' imóveis' + (withoutCoord ? ' (' + withoutCoord + ' sem coordenada, fora do mapa)' : '');
+      let summary = visible === total
+        ? visible + ' imóveis'
+        : visible + ' de ' + total + ' imóveis';
+      if (withoutCoord) summary += ' (' + withoutCoord + ' sem coordenada, fora do mapa)';
+      document.getElementById('summary').textContent = summary;
+    }
+
+    // Marca a linha clicada (salva o id; re-renderiza para mover a marca)
+    function markClicked(id) {
+      localStorage.setItem(LAST_CLICKED_KEY, id);
+      render();
     }
 
     // --- Ordenacao por coluna ---
@@ -285,6 +380,11 @@
       });
     });
 
+    // Filtros: ao mudar qualquer checkbox, re-renderiza tudo
+    document.querySelectorAll('.filters input').forEach(function (input) {
+      input.addEventListener('change', render);
+    });
+
     // Desativa um anuncio: avisa o servidor (grava ativo=0) e some com a linha + pin.
     function deactivate(id, tr, marker) {
       fetch('/deactivate/' + id, { method: 'POST' })
@@ -292,6 +392,7 @@
           if (!response.ok) throw new Error('falha');
           tr.remove();
           if (marker) pinLayer.removeLayer(marker);
+          showToast('Anúncio escondido');
         })
         .catch(function () {
           alert('Nao foi possivel desativar. O servidor (app.py) esta rodando?');
@@ -347,13 +448,14 @@
           property.rating = result.rating;
           buildStars(td, property, tr);
           tr.classList.toggle('high-rating', property.rating >= HIGHLIGHT_RATING);
+          showToast('Nota salva');
         })
         .catch(function () {
           alert('Nao foi possivel salvar a nota. O servidor (app.py) esta rodando?');
         });
     }
 
-    render('rentals');
+    render();
   </script>
 </body>
 </html>
