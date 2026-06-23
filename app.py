@@ -6,7 +6,7 @@
 # arquivo HTML estatico nao consegue. Este servidor pequeno (Flask) faz essa ponte.
 # O HTML/CSS/JS fica no arquivo report.html (renderizado via Jinja2 com os dados).
 
-from flask import Flask, abort, render_template
+from flask import Flask, abort, render_template, send_from_directory
 
 import config
 import database
@@ -18,10 +18,18 @@ app = Flask(__name__, template_folder=".")
 
 def build_report_data(connection):
     # Monta a lista de imoveis (com score e variacao) pronta para o template.
-    # Ja vem ordenada por score. Descarta o que esta alem do raio (config.MAX_DISTANCE_KM).
+    # Ja vem ordenada por score. Elimina os ATIVOS fora da faixa de preco/distancia
+    # (ranking.within_range); mantem os ocultos para o filtro "so ocultos" do relatorio.
     # As chaves abaixo (em ingles) sao lidas diretamente pelo JS de report.html.
-    properties = ranking.compute_scores(ranking.load_properties(connection, "aluguel"))
-    properties = [p for p in properties if p["distance_km"] <= config.MAX_DISTANCE_KM]
+    # include_inactive=True traz tambem os ocultos.
+    properties = ranking.compute_scores(
+        ranking.load_properties(connection, "aluguel", include_inactive=True)
+    )
+    properties = [
+        property
+        for property in properties
+        if property.get("active") == 0 or ranking.within_range(property)
+    ]
     rentals = [
         {
             "id": property["id"],
@@ -37,6 +45,20 @@ def build_report_data(connection):
             "furnished": property.get("furnished"),
             "floor": property.get("floor"),
             "accepts_pet": property.get("accepts_pet"),
+            "active": property.get("active", 1),
+            "gym": property.get("gym"),
+            "pool": property.get("pool"),
+            "bike": property.get("bike"),
+            "sauna": property.get("sauna"),
+            "bed": property.get("bed"),
+            "stove": property.get("stove"),
+            "fridge": property.get("fridge"),
+            "wardrobe": property.get("wardrobe"),
+            "kitchen": property.get("kitchen"),
+            "ac": property.get("ac"),
+            "microwave": property.get("microwave"),
+            "airfryer": property.get("airfryer"),
+            "workspace": property.get("workspace"),
             "address": property["address"] or "",
             "url": (property["url"] or "").split("?")[0],
             "lat": property["latitude"],
@@ -66,6 +88,13 @@ def index():
     )
 
 
+# Rede de metro/CPTM (estacoes + traçados das linhas) lida via fetch pelo report.html.
+# Arquivo fixo gerado a partir do OpenStreetMap; ver transit.json na raiz.
+@app.route("/transit.json")
+def transit():
+    return send_from_directory(".", "transit.json")
+
+
 @app.route("/deactivate/<property_id>", methods=["POST"])
 def deactivate(property_id):
     connection = database.connect()
@@ -75,6 +104,19 @@ def deactivate(property_id):
         connection.close()
         abort(404)
     database.deactivate_property(connection, property_id)
+    connection.close()
+    return "", 204  # 204 = sucesso, sem conteudo
+
+
+@app.route("/reactivate/<property_id>", methods=["POST"])
+def reactivate(property_id):
+    connection = database.connect()
+    database.create_tables(connection)
+    exists = connection.execute("SELECT 1 FROM imoveis WHERE id = ?", (property_id,)).fetchone()
+    if not exists:
+        connection.close()
+        abort(404)
+    database.reactivate_property(connection, property_id)
     connection.close()
     return "", 204  # 204 = sucesso, sem conteudo
 
@@ -98,9 +140,53 @@ def rate(property_id, value):
     return {"rating": new_rating}  # devolve a nota gravada para o JS atualizar as estrelas
 
 
+# O front usa chaves em ingles (DATA.rentals); o banco usa portugues. Traduz aqui.
+AMENITY_KEY_TO_COLUMN = {
+    "pool": "piscina",
+    "gym": "academia",
+    "bike": "bicicletario",
+    "sauna": "sauna",
+    "furnished": "mobiliado",
+    "bed": "cama",
+    "stove": "fogao",
+    "fridge": "geladeira",
+    "wardrobe": "guarda_roupa",
+    "kitchen": "armario_cozinha",
+    "ac": "ar_condicionado",
+    "microwave": "microondas",
+    "airfryer": "airfryer",
+    "workspace": "workspace",
+}
+
+
+@app.route("/amenity/<property_id>/<amenity>/<value>", methods=["POST"])
+def amenity(property_id, amenity, value):
+    # value vem como texto: "1" (tem), "0" (nao tem) ou "null" (nao verificado).
+    # Texto porque o conversor <int:> do Flask nao aceita None/vazio.
+    parsed = None if value == "null" else value
+    column = AMENITY_KEY_TO_COLUMN.get(amenity)
+    if column is None:
+        abort(400)  # chave de amenidade desconhecida
+    connection = database.connect()
+    database.create_tables(connection)
+    exists = connection.execute("SELECT 1 FROM imoveis WHERE id = ?", (property_id,)).fetchone()
+    if not exists:
+        connection.close()
+        abort(404)
+    try:
+        new_value = database.set_amenity(connection, property_id, column, parsed)
+    except ValueError:
+        connection.close()
+        abort(400)  # amenidade fora da allowlist
+    connection.close()
+    return {"value": new_value}  # devolve o valor gravado para o JS atualizar o icone
+
+
 if __name__ == "__main__":
     # Porta 8765: a 5000 e usada pelo AirPlay do macOS e a 8000 pelo Docker.
     # Esta e incomum, entao dificilmente conflita.
     PORT = 8765
     print(f"Servidor em http://localhost:{PORT}  (Ctrl+C para parar)")
-    app.run(port=PORT, debug=False)
+    # debug=True liga o reloader: ao salvar um .py o servidor reinicia sozinho,
+    # entao durante o desenvolvimento basta atualizar a pagina (sem Ctrl+C toda vez).
+    app.run(port=PORT, debug=True)

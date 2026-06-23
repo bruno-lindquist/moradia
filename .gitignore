@@ -2,3 +2,5 @@
 __pycache__/
 *.db.backup
 .claude/
+.playwright-mcp/
+mapa-*.png
