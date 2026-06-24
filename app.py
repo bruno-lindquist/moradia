@@ -16,6 +16,13 @@ import ranking
 app = Flask(__name__, template_folder=".")
 
 
+def _to_minutes(seconds):
+    # Converte segundos -> minutos arredondados; None se ainda nao calculado.
+    if seconds is None:
+        return None
+    return round(seconds / 60)
+
+
 def build_report_data(connection):
     # Monta a lista de imoveis (com score e variacao) pronta para o template.
     # Ja vem ordenada por score. Elimina os ATIVOS fora da faixa de preco/distancia
@@ -63,6 +70,9 @@ def build_report_data(connection):
             "url": (property["url"] or "").split("?")[0],
             "lat": property["latitude"],
             "lon": property["longitude"],
+            # tempo ate o shopping em minutos (None = ainda nao calculado por commute.py)
+            "walk_min": _to_minutes(property.get("walk_seconds")),
+            "bike_min": _to_minutes(property.get("bike_seconds")),
             "change": ranking.price_change(connection, property["id"]),
         }
         for property in properties

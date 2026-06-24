@@ -13,22 +13,26 @@ REFERENCE_LON = -46.6997
 #
 # RENT_FILTERS: segmentos de filtro do QuintoAndar anexados a busca de aluguel.
 #   preco (de-500-a-3000-reais) / tipos (apartamento, kitnet, casacondominio) / area (de-20-a-30-m2)
-# Para mudar os filtros, ajuste esta string. Para nao filtrar, deixe "".
-RENT_FILTERS = "/de-500-a-3000-reais/apartamento/kitnet/casacondominio/de-10-a-30-m2"
-
-RENT_URL_TEMPLATE = "https://www.quintoandar.com.br/alugar/imovel/{slug}-sao-paulo-sp-brasil" + RENT_FILTERS
 
 # Limites para DESCARTAR no scraper o que nao bate com RENT_FILTERS.
 # Necessario porque o QuintoAndar mistura imoveis "recomendados" fora do filtro
 # (search_results_flexible) quando a busca e restritiva. Mantenha em sincronia com RENT_FILTERS.
 PRICE_MIN = 500
-PRICE_MAX = 3000
+PRICE_MAX = 3200
 AREA_MIN = 10
-AREA_MAX = 30
+AREA_MAX = 40
+
+
+# Para mudar os filtros, ajuste esta string. Para nao filtrar, deixe "".
+RENT_FILTERS = f"/de-{PRICE_MIN}-a-{PRICE_MAX}-reais/apartamento/kitnet/casacondominio/de-10-a-{AREA_MAX}-m2"
+
+RENT_URL_TEMPLATE = "https://www.quintoandar.com.br/alugar/imovel/{slug}-sao-paulo-sp-brasil" + RENT_FILTERS
+
+
 
 # No relatorio, nao mostrar imoveis acima desta distancia do shopping (km).
 # Tambem descarta erros de geocodificacao (ruas homonimas em outro lugar da cidade).
-MAX_DISTANCE_KM = 2
+MAX_DISTANCE_KM = 3
 # Compra desativada (buscamos so aluguel). Para reativar, descomente a linha abaixo
 # e a operacao "compra" em scraper.py.
 # BUY_URL_TEMPLATE = "https://www.quintoandar.com.br/comprar/imovel/{slug}-sao-paulo-sp-brasil"

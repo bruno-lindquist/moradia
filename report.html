@@ -53,8 +53,8 @@
     #map { height: 400px; border-radius: 8px; }
     table { border-collapse: collapse; width: 100%; font-size: 14px; }
     th, td { padding: 5px 8px; border-bottom: 1px solid #1f232c; text-align: left; }
-    /* Total (4a col), Dist. (5a) e Área (7a) nao quebram o texto em duas linhas */
-    td:nth-child(4), td:nth-child(5), td:nth-child(7) { white-space: nowrap; }
+    /* Total (4a col), Dist. (5a), Tempo (6a) e Área (8a) nao quebram o texto */
+    td:nth-child(4), td:nth-child(5), td:nth-child(6), td:nth-child(8) { white-space: nowrap; }
     /* Ao rolar ate uma linha (clique no pin), reserva o espaco do mapa + cabecalho
        fixos no topo, senao a linha para escondida atras deles. ~412 (mapa) + 44 (thead) */
     tbody tr { scroll-margin-top: 460px; }
@@ -146,6 +146,7 @@
     <thead>
       <tr>
         <th></th><th>#</th><th>Score</th><th>Total</th><th>Dist.</th>
+        <th title="Tempo a pé · de bike até o shopping">🚶🚴</th>
         <th>Qt.</th><th>Área</th><th></th><th></th><th></th><th title="Piscina">🏊</th><th title="Academia">🏋️</th><th title="Bicicletário">🚲</th><th title="Cama">🛌🏻</th><th title="Fogão">🔥</th><th title="Geladeira">❄️</th><th title="Guarda-roupas">👕</th><th title="Armário cozinha">🥂</th><th title="Ar-condicionado">𖣘</th><th title="Micro-ondas">📡</th><th title="Air fryer">🍟</th><th title="Workspace">💻</th><th></th><th style="width: 300px;">Endereço</th><th>Cód.</th><th></th>
       </tr>
     </thead>
@@ -312,6 +313,20 @@
         .replace(/\bVila\b/gi, 'Vl');
     }
 
+    // Celula de tempo ate o shopping: "19′ · 6′" (a pe · bike). Vazia quando ainda
+    // nao calculado (commute.py nao rodou para este imovel). Ordena pelo tempo a pe;
+    // nao calculados (Infinity) vao para o fim ao ordenar.
+    function commuteCell(walkMin, bikeMin) {
+      const td = document.createElement('td');
+      td.className = 'extras';
+      if (walkMin != null) {
+        td.textContent = walkMin + '′ · ' + (bikeMin != null ? bikeMin + '′' : '–');
+        td.title = 'A pé ' + walkMin + ' min · de bike ' + (bikeMin != null ? bikeMin + ' min' : '?');
+      }
+      td.dataset.value = walkMin != null ? walkMin : Infinity;
+      return td;
+    }
+
     // Celula de "extra": mostra o icone so quando positivo (senao fica vazia).
     // 'sortValue' (0/1 ou o numero) permite ordenar a coluna pelo cabecalho.
     function extraCell(icon, title, positive, sortValue) {
@@ -476,6 +491,7 @@
           ? 'R$ ' + property.total_price.toLocaleString('pt-BR') : '—';
         tr.appendChild(cell(totalText, property.total_price != null ? property.total_price : 0));
         tr.appendChild(cell(property.distance_km + ' km', property.distance_km));
+        tr.appendChild(commuteCell(property.walk_min, property.bike_min));
         tr.appendChild(cell(property.bedrooms, property.bedrooms));
         tr.appendChild(cell(property.area_m2 + ' m²', property.area_m2));
         // Extras em colunas separadas (sem titulo no cabecalho), so o icone quando positivo

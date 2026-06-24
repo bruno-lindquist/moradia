@@ -38,8 +38,22 @@ def create_tables(connection):
             preferido     INTEGER NOT NULL DEFAULT 0,
             nota          INTEGER NOT NULL DEFAULT 0,
             mobiliado     INTEGER,
+            mobiliado_manual INTEGER NOT NULL DEFAULT 0,
             andar         INTEGER,
             aceita_pet    INTEGER,
+            academia      INTEGER,
+            piscina       INTEGER,
+            bicicletario  INTEGER,
+            sauna         INTEGER,
+            cama            INTEGER,
+            fogao           INTEGER,
+            geladeira       INTEGER,
+            guarda_roupa    INTEGER,
+            armario_cozinha INTEGER,
+            ar_condicionado INTEGER,
+            microondas      INTEGER,
+            airfryer        INTEGER,
+            workspace       INTEGER,
             detalhado     INTEGER NOT NULL DEFAULT 0
         );
 
@@ -81,21 +95,64 @@ def _migrate_property_columns(connection):
         connection.execute("ALTER TABLE imoveis ADD COLUMN preferido INTEGER NOT NULL DEFAULT 0")
     if "mobiliado" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN mobiliado INTEGER")
+    # flag: mobiliado foi definido manualmente no relatorio? (1 = scraping nao sobrescreve)
+    if "mobiliado_manual" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN mobiliado_manual INTEGER NOT NULL DEFAULT 0")
     if "andar" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN andar INTEGER")
     if "aceita_pet" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN aceita_pet INTEGER")
+    # Amenidades de condominio, marcadas manualmente (1=tem, 0=nao tem, NULL=nao verificado)
+    if "academia" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN academia INTEGER")
+    if "piscina" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN piscina INTEGER")
+    if "bicicletario" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN bicicletario INTEGER")
+    if "sauna" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN sauna INTEGER")
+    # Amenidades de mobilia/equipamento, marcadas manualmente (1=tem, 0=nao, NULL=nao verificado)
+    if "cama" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN cama INTEGER")
+    if "fogao" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN fogao INTEGER")
+    if "geladeira" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN geladeira INTEGER")
+    if "guarda_roupa" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN guarda_roupa INTEGER")
+    if "armario_cozinha" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN armario_cozinha INTEGER")
+    if "ar_condicionado" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN ar_condicionado INTEGER")
+    if "microondas" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN microondas INTEGER")
+    if "airfryer" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN airfryer INTEGER")
+    if "workspace" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN workspace INTEGER")
     if "detalhado" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN detalhado INTEGER NOT NULL DEFAULT 0")
     if "nota" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN nota INTEGER NOT NULL DEFAULT 0")
         # converte preferidos existentes em nota 5 (nao perde as escolhas ja feitas)
         connection.execute("UPDATE imoveis SET nota = 5 WHERE preferido = 1")
+    # Tempo de deslocamento ate a referencia (Shopping Morumbi), em segundos, calculado
+    # via OSRM por commute.py. NULL = ainda nao calculado. So preenchido para imoveis com nota.
+    if "walk_seconds" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN walk_seconds INTEGER")
+    if "bike_seconds" not in columns:
+        connection.execute("ALTER TABLE imoveis ADD COLUMN bike_seconds INTEGER")
 
 
 def deactivate_property(connection, property_id):
     # Marca o imovel como inativo (some do relatorio). Nao apaga nada.
     connection.execute("UPDATE imoveis SET ativo = 0 WHERE id = ?", (property_id,))
+    connection.commit()
+
+
+def reactivate_property(connection, property_id):
+    # Volta o imovel para ativo (desfaz o "esconder"). Nao apaga nada.
+    connection.execute("UPDATE imoveis SET ativo = 1 WHERE id = ?", (property_id,))
     connection.commit()
 
 
@@ -106,6 +163,37 @@ def set_rating(connection, property_id, rating):
     connection.execute("UPDATE imoveis SET nota = ? WHERE id = ?", (rating, property_id))
     connection.commit()
     return rating
+
+
+# Colunas marcaveis manualmente no relatorio. Allowlist tambem protege contra SQL
+# injection: o nome da coluna nao pode vir como '?', entao validamos antes de interpolar.
+# 'mobiliado' tambem vem do scraping; ao marca-lo aqui, ligamos a flag mobiliado_manual
+# para o scraping nao sobrescrever depois.
+AMENITY_COLUMNS = {
+    "academia", "piscina", "bicicletario", "sauna", "mobiliado",
+    "cama", "fogao", "geladeira", "guarda_roupa", "armario_cozinha", "ar_condicionado",
+    "microondas", "airfryer", "workspace",
+}
+
+
+def set_amenity(connection, property_id, amenity, value):
+    # Marca uma coluna do imovel. value: 1 = tem, 0 = nao tem, None = nao verificado.
+    # Retorna o valor gravado. Levanta ValueError se a coluna nao for da allowlist.
+    if amenity not in AMENITY_COLUMNS:
+        raise ValueError(f"coluna invalida: {amenity}")
+    value = None if value is None else (1 if int(value) == 1 else 0)
+    connection.execute(
+        f"UPDATE imoveis SET {amenity} = ? WHERE id = ?", (value, property_id)
+    )
+    # Mobiliado definido manualmente passa a ser "protegido": flag liga quando ha valor
+    # (1/0) e desliga ao voltar para "nao verificado" (None), devolvendo ao scraping.
+    if amenity == "mobiliado":
+        manual = 0 if value is None else 1
+        connection.execute(
+            "UPDATE imoveis SET mobiliado_manual = ? WHERE id = ?", (manual, property_id)
+        )
+    connection.commit()
+    return value
 
 
 # Bairros iniciais (regiao do Brooklin/Campo Belo + vizinhos). Sao repostos se o banco
@@ -170,7 +258,10 @@ def save_property(connection, property, now):
             quartos = excluded.quartos,
             -- estes vem da pagina de detalhe; se vier NULL (falhou), mantem o antigo
             vagas = COALESCE(excluded.vagas, imoveis.vagas),
-            mobiliado = COALESCE(excluded.mobiliado, imoveis.mobiliado),
+            -- mobiliado: se foi marcado manualmente (flag=1), preserva o valor manual;
+            -- senao, comporta como os demais (usa o novo do scraping ou mantem o antigo).
+            mobiliado = CASE WHEN imoveis.mobiliado_manual = 1 THEN imoveis.mobiliado
+                             ELSE COALESCE(excluded.mobiliado, imoveis.mobiliado) END,
             andar = COALESCE(excluded.andar, imoveis.andar),
             aceita_pet = COALESCE(excluded.aceita_pet, imoveis.aceita_pet),
             -- detalhado so "sobe" para 1; uma vez detalhado, continua detalhado

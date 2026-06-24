@@ -1,26 +1,52 @@
 # ENTRYPOINT 2: le o banco, calcula custo-beneficio e mostra o ranking + variacoes de preco.
 # Rode com:  python ranking.py
 #
-# Score de custo-beneficio (0 a 100, maior = melhor):
-#   - custo mensal  (34%) -> VALOR TOTAL cheio (aluguel+condominio+IPTU); mais barato pontua mais
-#   - distancia km  (25%) -> mais perto do shopping pontua mais
-#   - nota manual   (15%) -> sua avaliacao de 1 a 5 estrelas (normalizada)
-#   - mobiliado     (9%) -> ponto cheio se for mobiliado
-#   - vaga          (9%) -> ponto cheio se tiver 1+ vaga de garagem
-#   - andar 4o+     (4%) -> ponto cheio se o andar for 4o ou acima
-#   - sem pet       (4%) -> ponto cheio se NAO aceita pet
-# Os pesos sao uma escolha: priorizamos o bolso um pouco acima da localizacao.
-# Cada metrica e normalizada de 0 a 1 no conjunto de imoveis carregado.
+# Score de custo-beneficio = SOMA DE PONTOS com faixas FIXAS (0 a 145, maior = melhor).
+# As faixas sao fixas (nao dependem dos outros imoveis), entao o score de um imovel nao
+# muda quando outro entra/sai da lista -- da pra comparar o ranking de dias diferentes.
+#   - preco        (35 pts) -> faixa R$ 1.800 (cheio) a R$ 3.200 (zero); mais barato pontua mais
+#   - distancia    (35 pts) -> faixa 0,3 km (cheio) a 3 km (zero); mais perto pontua mais
+#   - mobiliado    (10 pts) -> ponto cheio se for mobiliado
+#   - vaga          (6 pts) -> ponto cheio se tiver 1+ vaga de garagem
+#   - piscina       (5 pts) -> ponto cheio se tem piscina (marcada manualmente)
+#   - academia      (3 pts) -> ponto cheio se tem academia
+#   - sauna         (3 pts) -> ponto cheio se tem sauna
+#   - andar 4o+     (3 pts) -> ponto cheio se o andar for 4o ou acima
+#   - nota manual   (5 pts) -> sua avaliacao de 1 a 5 estrelas (normalizada)
+#   - cama, fogao, geladeira, guarda-roupa, armario cozinha, ar-condicionado,
+#     micro-ondas, air fryer, workspace (5 pts cada)
+#       -> mobilia/equipamento, marcados manualmente no relatorio
+# Imoveis ATIVOS fora da faixa (preco ou distancia) sao ELIMINADOS do ranking.
+# "aceita pet" e "bicicletario" sao apenas EXIBIDOS na tabela; nao entram no score.
 
 import database
 
-WEIGHT_PRICE = 0.34
-WEIGHT_DISTANCE = 0.25
-WEIGHT_RATING = 0.15        # nota manual de 1 a 5 (sua avaliacao)
-WEIGHT_FURNISHED = 0.09
-WEIGHT_PARKING = 0.09
-WEIGHT_FLOOR = 0.04         # andar 4o ou acima
-WEIGHT_NO_PET = 0.04        # NAO aceita pet
+# Faixas fixas: o limite "bom" da pontos cheios, o limite "ruim" da zero.
+PRICE_MIN = 1800            # custo mensal (R$) -> pontuacao cheia
+PRICE_MAX = 3200            # custo mensal (R$) -> zero pontos / acima disso elimina
+DISTANCE_MIN = 0.3          # km do shopping -> pontuacao cheia
+DISTANCE_MAX = 3.0          # km do shopping -> zero pontos / acima disso elimina
+
+# Pontos maximos por criterio (somam 100).
+POINTS_PRICE = 35
+POINTS_DISTANCE = 35
+POINTS_FURNISHED = 10
+POINTS_PARKING = 6
+POINTS_POOL = 5            # tem piscina
+POINTS_GYM = 3            # tem academia
+POINTS_SAUNA = 3
+POINTS_FLOOR = 3          # andar 4o ou acima
+POINTS_RATING = 5         # nota manual de 1 a 5 (sua avaliacao)
+# Amenidades de mobilia/equipamento (5 pts cada). Com elas o score MAXIMO sobe para 130.
+POINTS_BED = 5            # cama
+POINTS_STOVE = 5          # fogao
+POINTS_FRIDGE = 5         # geladeira
+POINTS_WARDROBE = 5       # guarda-roupa
+POINTS_KITCHEN = 5        # armario de cozinha
+POINTS_AC = 5             # ar-condicionado
+POINTS_MICROWAVE = 5      # micro-ondas
+POINTS_AIRFRYER = 5       # air fryer
+POINTS_WORKSPACE = 5      # espaco de trabalho
 
 HIGHLIGHT_RATING = 4        # nota a partir da qual destaca a linha e o pin
 
@@ -42,18 +68,24 @@ def _latest_price_by_property(connection):
     return {row["imovel_id"]: (row["valor"], row["valor_total"]) for row in rows}
 
 
-def load_properties(connection, operation):
+def load_properties(connection, operation, include_inactive=False):
     # Carrega imoveis de uma operacao. Os filtros (preco/tipo/area) ja sao aplicados
     # na URL de busca do QuintoAndar (veja config.RENT_FILTERS), entao aqui nao
     # refiltramos por preco/quartos -- so exigimos area e distancia para o score.
     # As colunas vem em portugues (do banco); montamos o dict com chaves em ingles.
+    # include_inactive=True traz tambem os ocultos (ativo=0), para o relatorio
+    # poder mostrar "so os ocultos" e oferecer restaurar.
+    active_filter = "" if include_inactive else "AND ativo = 1"
     rows = connection.execute(
-        """
+        f"""
         SELECT id, titulo, endereco, area_m2, quartos, vagas, distancia_km, url,
-               latitude, longitude, nota, mobiliado, andar, aceita_pet
+               latitude, longitude, nota, mobiliado, andar, aceita_pet, ativo,
+               academia, piscina, bicicletario, sauna,
+               cama, fogao, geladeira, guarda_roupa, armario_cozinha, ar_condicionado,
+               microondas, airfryer, workspace, walk_seconds, bike_seconds
         FROM imoveis
         WHERE operacao = ?
-          AND ativo = 1
+          {active_filter}
         """,
         (operation,),
     ).fetchall()
@@ -85,6 +117,22 @@ def load_properties(connection, operation):
                 "furnished": row["mobiliado"],
                 "floor": row["andar"],
                 "accepts_pet": row["aceita_pet"],
+                "active": row["ativo"],
+                "gym": row["academia"],
+                "pool": row["piscina"],
+                "bike": row["bicicletario"],
+                "sauna": row["sauna"],
+                "bed": row["cama"],
+                "stove": row["fogao"],
+                "fridge": row["geladeira"],
+                "wardrobe": row["guarda_roupa"],
+                "kitchen": row["armario_cozinha"],
+                "ac": row["ar_condicionado"],
+                "microwave": row["microondas"],
+                "airfryer": row["airfryer"],
+                "workspace": row["workspace"],
+                "walk_seconds": row["walk_seconds"],
+                "bike_seconds": row["bike_seconds"],
                 "price": value,
                 "total_price": total_value,
                 # cost = valor TOTAL cheio (aluguel + condominio + IPTU). E o que baseia
@@ -98,41 +146,68 @@ def load_properties(connection, operation):
     return properties
 
 
-def _normalize_inverted(values):
-    # Retorna funcao que mapeia um valor para 0..1, onde MENOR valor -> 1 (melhor).
-    if not values:
-        return lambda v: 0.0
-    lowest, highest = min(values), max(values)
-    if highest == lowest:
-        return lambda v: 1.0
-    return lambda v: (highest - v) / (highest - lowest)
+def _fixed_fraction(value, best, worst):
+    # Mapeia value para 0..1 numa faixa FIXA: best -> 1.0, worst -> 0.0.
+    # Trava (clamp) em 0..1. Funciona com best < worst (preco/distancia: menor e melhor).
+    fraction = (worst - value) / (worst - best)
+    return max(0.0, min(1.0, fraction))
+
+
+def within_range(property):
+    # True se o imovel esta dentro das faixas de preco E distancia (custo-beneficio aceitavel).
+    return (
+        PRICE_MIN <= property["cost"] <= PRICE_MAX
+        and DISTANCE_MIN <= property["distance_km"] <= DISTANCE_MAX
+    )
 
 
 def compute_scores(properties):
-    norm_price = _normalize_inverted([p["cost"] for p in properties])
-    norm_distance = _normalize_inverted([p["distance_km"] for p in properties])
+    # Pontua TODOS os imoveis (inclusive ocultos e fora da faixa). A ELIMINACAO de quem
+    # esta fora da faixa e feita por quem chama (CLI e app.py), para nao descartar os
+    # ocultos que o relatorio precisa exibir no filtro "so ocultos".
     for property in properties:
         # bonus: 1 ponto cheio se atende, 0 se nao atende/desconhecido
         bonus_furnished = 1 if property.get("furnished") == 1 else 0
         bonus_parking = 1 if (property.get("parking") or 0) >= 1 else 0
         floor = property.get("floor")
         bonus_floor = 1 if (floor is not None and floor >= MIN_GOOD_FLOOR) else 0
-        bonus_no_pet = 1 if property.get("accepts_pet") == 0 else 0  # NAO aceita pet e positivo
+        # amenidades manuais: ponto cheio so quando marcado como "tem" (1)
+        bonus_pool = 1 if property.get("pool") == 1 else 0
+        bonus_gym = 1 if property.get("gym") == 1 else 0
+        bonus_sauna = 1 if property.get("sauna") == 1 else 0
+        bonus_bed = 1 if property.get("bed") == 1 else 0
+        bonus_stove = 1 if property.get("stove") == 1 else 0
+        bonus_fridge = 1 if property.get("fridge") == 1 else 0
+        bonus_wardrobe = 1 if property.get("wardrobe") == 1 else 0
+        bonus_kitchen = 1 if property.get("kitchen") == 1 else 0
+        bonus_ac = 1 if property.get("ac") == 1 else 0
+        bonus_microwave = 1 if property.get("microwave") == 1 else 0
+        bonus_airfryer = 1 if property.get("airfryer") == 1 else 0
+        bonus_workspace = 1 if property.get("workspace") == 1 else 0
         # nota manual (1..5) normalizada para 0..1; sem nota (0) nao soma nada.
         # nota -1 = "visto" (apenas marcacao, sem estrela) tambem nao soma -> trata como 0.
         bonus_rating = max(0, property.get("rating") or 0) / 5
         score = (
-            WEIGHT_PRICE * norm_price(property["cost"])
-            + WEIGHT_DISTANCE * norm_distance(property["distance_km"])
-            + WEIGHT_RATING * bonus_rating
-            + WEIGHT_FURNISHED * bonus_furnished
-            + WEIGHT_PARKING * bonus_parking
-            + WEIGHT_FLOOR * bonus_floor
-            + WEIGHT_NO_PET * bonus_no_pet
+            POINTS_PRICE * _fixed_fraction(property["cost"], PRICE_MIN, PRICE_MAX)
+            + POINTS_DISTANCE * _fixed_fraction(property["distance_km"], DISTANCE_MIN, DISTANCE_MAX)
+            + POINTS_FURNISHED * bonus_furnished
+            + POINTS_PARKING * bonus_parking
+            + POINTS_POOL * bonus_pool
+            + POINTS_GYM * bonus_gym
+            + POINTS_SAUNA * bonus_sauna
+            + POINTS_FLOOR * bonus_floor
+            + POINTS_RATING * bonus_rating
+            + POINTS_BED * bonus_bed
+            + POINTS_STOVE * bonus_stove
+            + POINTS_FRIDGE * bonus_fridge
+            + POINTS_WARDROBE * bonus_wardrobe
+            + POINTS_KITCHEN * bonus_kitchen
+            + POINTS_AC * bonus_ac
+            + POINTS_MICROWAVE * bonus_microwave
+            + POINTS_AIRFRYER * bonus_airfryer
+            + POINTS_WORKSPACE * bonus_workspace
         )
-        property["score"] = round(score * 100, 1)
-    # Ordena pelo score (a nota ja esta embutida nele, como voce pediu - sem viés de
-    # jogar nota alta forcadamente para o topo; ela influencia via peso).
+        property["score"] = round(score, 1)
     properties.sort(key=lambda p: p["score"], reverse=True)
     return properties
 
@@ -176,6 +251,7 @@ def main():
     database.create_tables(connection)
 
     rentals = compute_scores(load_properties(connection, "aluguel"))
+    rentals = [property for property in rentals if within_range(property)]
 
     _print_ranking(connection, "ALUGUEL  (filtros aplicados na busca do site)", rentals)
 
