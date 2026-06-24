@@ -55,7 +55,6 @@ def fix_one(connection, page, property):
 
 def main(limit=None):
     connection = database.connect()
-    database.create_tables(connection)
     properties = _rated_properties(connection)
     if limit:
         properties = properties[:limit]

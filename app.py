@@ -18,12 +18,6 @@ import ranking
 # template_folder="." faz o Flask achar report.html na raiz do projeto (sem pasta templates/).
 app = Flask(__name__, template_folder=".")
 
-# Cria/migra o banco uma vez no carregamento do modulo (e nao a cada request, que rodava
-# todo o executescript + migrations a cada clique). Idempotente: CREATE/ALTER ... IF NOT EXISTS.
-_setup_connection = database.connect()
-database.create_tables(_setup_connection)
-_setup_connection.close()
-
 
 def with_property(handler):
     # Decorator para as rotas que agem sobre um imovel: abre a conexao, confere que o

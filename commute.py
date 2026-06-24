@@ -78,7 +78,6 @@ def _existing_times(connection, property_id):
 
 def main():
     connection = database.connect()
-    database.create_tables(connection)
 
     properties = _properties_to_process(connection)
     print(f"{len(properties)} imovel(is) com nota para processar (maior score primeiro).")

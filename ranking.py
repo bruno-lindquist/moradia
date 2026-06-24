@@ -209,7 +209,6 @@ def _print_ranking(connection, title, properties):
 
 def main():
     connection = database.connect()
-    database.create_tables(connection)
 
     rentals = compute_scores(load_properties(connection, "aluguel"))
     rentals = [property for property in rentals if within_range(property)]

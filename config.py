@@ -30,9 +30,6 @@ RENT_URL_TEMPLATE = "https://www.quintoandar.com.br/alugar/imovel/{slug}-sao-pau
 
 
 
-# No relatorio, nao mostrar imoveis acima desta distancia do shopping (km).
-# Tambem descarta erros de geocodificacao (ruas homonimas em outro lugar da cidade).
-MAX_DISTANCE_KM = 3
 # Compra desativada de proposito: buscamos so aluguel (ver operacao "aluguel" em scraper.py).
 
 # Quantas vezes clicar em "Ver mais" por bairro (cada clique traz ~12 imoveis).

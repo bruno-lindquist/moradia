@@ -1,5 +1,6 @@
-# Camada de banco de dados (SQLite puro, sem ORM).
-# Duas tabelas: imoveis (dados estaveis) e precos (um snapshot por execucao).
+# Camada de banco de dados (SQLite puro, sem ORM). So le e escreve dados: o banco
+# (moradia.db) ja vem pronto, com o schema e os dados de apoio (bairros, amenidades).
+# Para (re)criar o banco do zero use o script de migracao; aqui nao ha CREATE/seed.
 #
 # Convencao de idioma: os identificadores SQL (tabelas/colunas) estao em portugues
 # porque vivem dentro do banco real (moradia.db). O codigo Python em volta esta em
@@ -17,107 +18,6 @@ def connect():
     connection = sqlite3.connect(config.DB_PATH)
     connection.row_factory = sqlite3.Row
     return connection
-
-
-def create_tables(connection):
-    connection.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS imoveis (
-            id            TEXT PRIMARY KEY,
-            operacao      TEXT NOT NULL,
-            titulo        TEXT,
-            endereco      TEXT,
-            area_m2       REAL,
-            quartos       INTEGER,
-            vagas         INTEGER,
-            url           TEXT,
-            latitude      REAL,
-            longitude     REAL,
-            distancia_km  REAL,
-            primeira_vez  TEXT,
-            ativo         INTEGER NOT NULL DEFAULT 1,
-            preferido     INTEGER NOT NULL DEFAULT 0,
-            nota          INTEGER NOT NULL DEFAULT 0,
-            mobiliado     INTEGER,
-            mobiliado_manual INTEGER NOT NULL DEFAULT 0,
-            andar         INTEGER,
-            aceita_pet    INTEGER,
-            academia      INTEGER,
-            piscina       INTEGER,
-            bicicletario  INTEGER,
-            sauna         INTEGER,
-            cama            INTEGER,
-            fogao           INTEGER,
-            geladeira       INTEGER,
-            guarda_roupa    INTEGER,
-            armario_cozinha INTEGER,
-            ar_condicionado INTEGER,
-            microondas      INTEGER,
-            airfryer        INTEGER,
-            workspace       INTEGER,
-            detalhado     INTEGER NOT NULL DEFAULT 0
-        );
-
-        CREATE TABLE IF NOT EXISTS precos (
-            id            INTEGER PRIMARY KEY AUTOINCREMENT,
-            imovel_id     TEXT NOT NULL REFERENCES imoveis(id),
-            valor         REAL NOT NULL,
-            valor_total   REAL,
-            coletado_em   TEXT NOT NULL
-        );
-
-        -- Cache de geocodificacao: evita pedir o mesmo endereco varias vezes ao Nominatim
-        CREATE TABLE IF NOT EXISTS geocache (
-            endereco   TEXT PRIMARY KEY,
-            latitude   REAL,
-            longitude  REAL
-        );
-
-        -- Bairros a buscar. 'slug' vai na URL do QuintoAndar; 'ativo' liga/desliga.
-        CREATE TABLE IF NOT EXISTS bairros (
-            slug   TEXT PRIMARY KEY,
-            nome   TEXT NOT NULL,
-            ativo  INTEGER NOT NULL DEFAULT 1
-        );
-        """
-    )
-    _seed_neighborhoods(connection)
-    _migrate_property_columns(connection)
-    connection.commit()
-
-
-def _migrate_property_columns(connection):
-    # Bancos criados antes destas colunas nao as tem. ALTER TABLE so adiciona a coluna
-    # (nao apaga nada). Idempotente: so age se a coluna ainda nao existir.
-    columns = {row["name"] for row in connection.execute("PRAGMA table_info(imoveis)")}
-
-    # Colunas que nao sao amenidades genericas (tem regra/default proprio).
-    base_columns = [
-        ("ativo", "INTEGER NOT NULL DEFAULT 1"),
-        ("preferido", "INTEGER NOT NULL DEFAULT 0"),
-        ("mobiliado", "INTEGER"),
-        # flag: mobiliado foi definido manualmente no relatorio? (1 = scraping nao sobrescreve)
-        ("mobiliado_manual", "INTEGER NOT NULL DEFAULT 0"),
-        ("andar", "INTEGER"),
-        ("aceita_pet", "INTEGER"),
-        ("detalhado", "INTEGER NOT NULL DEFAULT 0"),
-        # Tempo de deslocamento ate a referencia (Shopping Morumbi), em segundos, calculado
-        # via OSRM por commute.py. NULL = ainda nao calculado.
-        ("walk_seconds", "INTEGER"),
-        ("bike_seconds", "INTEGER"),
-    ]
-    # Amenidades manuais (1=tem, 0=nao tem, NULL=nao verificado): derivadas da fonte unica.
-    amenity_columns = [(amenity["column"], "INTEGER") for amenity in amenities.AMENITIES]
-
-    for name, definition in base_columns + amenity_columns:
-        if name not in columns:
-            connection.execute(f"ALTER TABLE imoveis ADD COLUMN {name} {definition}")
-
-    # 'nota' fica fora do loop por causa do efeito colateral: ao cria-la pela 1a vez,
-    # converte preferidos existentes em nota 5 (nao perde as escolhas ja feitas).
-    if "nota" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN nota INTEGER NOT NULL DEFAULT 0")
-        connection.execute("UPDATE imoveis SET nota = 5 WHERE preferido = 1")
 
 
 def deactivate_property(connection, property_id):
@@ -166,33 +66,6 @@ def set_amenity(connection, property_id, amenity, value):
         )
     connection.commit()
     return value
-
-
-# Bairros iniciais (regiao do Brooklin/Campo Belo + vizinhos). Sao repostos se o banco
-# for recriado. Para adicionar mais, inclua aqui (e/ou faca INSERT direto na tabela).
-_INITIAL_NEIGHBORHOODS = [
-    ("jardim-das-acacias", "Jardim das Acácias"),
-    ("brooklin", "Brooklin"),
-    ("campo-belo", "Campo Belo"),
-    ("granja-julieta", "Granja Julieta"),
-    ("vila-sao-francisco", "Vila São Francisco"),
-    ("vila-cordeiro", "Vila Cordeiro"),
-    ("alto-da-boa-vista", "Alto da Boa Vista"),
-    ("jardim-heliomar", "Jardim Heliomar"),
-    ("brooklin-novo", "Brooklin Novo"),
-    ("chacara-santo-antonio", "Chácara Santo Antônio"),
-    ("brooklin-velho", "Brooklin Velho"),
-    ("jardim-petropolis", "Jardim Petrópolis"),
-]
-
-
-def _seed_neighborhoods(connection):
-    # So insere se a tabela estiver vazia (nao sobrescreve ajustes seus depois).
-    is_empty = connection.execute("SELECT COUNT(*) FROM bairros").fetchone()[0] == 0
-    if is_empty:
-        connection.executemany(
-            "INSERT INTO bairros (slug, nome) VALUES (?, ?)", _INITIAL_NEIGHBORHOODS
-        )
 
 
 def detailed_ids(connection):

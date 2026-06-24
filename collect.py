@@ -30,7 +30,6 @@ def _save_properties(connection, properties, now):
 
 def main():
     connection = database.connect()
-    database.create_tables(connection)
     now = database.now_iso()
 
     neighborhoods = database.active_neighborhoods(connection)
