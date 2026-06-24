@@ -33,9 +33,7 @@ RENT_URL_TEMPLATE = "https://www.quintoandar.com.br/alugar/imovel/{slug}-sao-pau
 # No relatorio, nao mostrar imoveis acima desta distancia do shopping (km).
 # Tambem descarta erros de geocodificacao (ruas homonimas em outro lugar da cidade).
 MAX_DISTANCE_KM = 3
-# Compra desativada (buscamos so aluguel). Para reativar, descomente a linha abaixo
-# e a operacao "compra" em scraper.py.
-# BUY_URL_TEMPLATE = "https://www.quintoandar.com.br/comprar/imovel/{slug}-sao-paulo-sp-brasil"
+# Compra desativada de proposito: buscamos so aluguel (ver operacao "aluguel" em scraper.py).
 
 # Quantas vezes clicar em "Ver mais" por bairro (cada clique traz ~12 imoveis).
 # Limite de seguranca: para de clicar quando o botao some, mesmo antes deste maximo.
@@ -50,3 +48,8 @@ HEADLESS = False
 
 # Caminho do banco SQLite (um arquivo so, na pasta do projeto)
 DB_PATH = "moradia.db"
+
+
+def clean_url(url):
+    # Remove a query string (tudo apos "?"): deixa a URL do anuncio limpa para exibir.
+    return (url or "").split("?")[0]

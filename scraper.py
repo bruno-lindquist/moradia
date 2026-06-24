@@ -83,9 +83,33 @@ def _scrape_details(page, property):
         parking = _parse_parking(items)
         if parking is not None:
             property["parking"] = parking
+        # Coordenada exata do imovel, fornecida pelo proprio QuintoAndar na pagina.
+        # E muito mais precisa que geocodificar pelo nome da rua (ruas longas geram
+        # erro de ate ~1 km). geo() so e usado como fallback quando isto vem vazio.
+        latitude, longitude = _parse_coordinates(page)
+        if latitude is not None:
+            property["latitude"] = latitude
+            property["longitude"] = longitude
         property["detailed"] = 1  # sucesso: nao precisa reabrir a pagina deste imovel
     except Exception:
         pass  # deixa os campos como estao; nao marca detailed -> tenta de novo na proxima
+
+
+def _parse_coordinates(page):
+    # Le a coordenada do imovel do JSON __NEXT_DATA__ embutido na pagina.
+    # Retorna (latitude, longitude) ou (None, None) se nao encontrar.
+    try:
+        block = page.query_selector("#__NEXT_DATA__")
+        if not block:
+            return None, None
+        text = block.inner_text()
+        latitude = re.search(r'"lat"\s*:\s*(-?\d+\.\d+)', text)
+        longitude = re.search(r'"lng"\s*:\s*(-?\d+\.\d+)', text)
+        if latitude and longitude:
+            return float(latitude.group(1)), float(longitude.group(1))
+    except Exception:
+        pass
+    return None, None
 
 
 def _parse_furnished(items):

@@ -42,6 +42,17 @@ def _route_seconds(profile, origin_lat, origin_lon):
     return round(routes[0]["duration"])
 
 
+def route_times(latitude, longitude):
+    # Tempo a pe e de bike (segundos) ate a referencia, com pausa entre as consultas
+    # (boa cidadania com o OSRM publico). Retorna (walk_seconds, bike_seconds);
+    # cada um pode ser None se a rota nao for encontrada.
+    walk = _route_seconds("walking", latitude, longitude)
+    time.sleep(REQUEST_PAUSE_SECONDS)
+    bike = _route_seconds("cycling", latitude, longitude)
+    time.sleep(REQUEST_PAUSE_SECONDS)
+    return walk, bike
+
+
 def _properties_to_process(connection):
     # Imoveis com nota (>=1), ordenados por score desc, que ainda nao tem os dois tempos.
     # compute_scores ja ordena por score decrescente.
@@ -84,10 +95,7 @@ def main():
         location = (round(property["latitude"], 6), round(property["longitude"], 6))
         if location not in cache:
             print(f"  score {property['score']:5} | {property['address'] or property['id']}")
-            walk_seconds = _route_seconds("walking", *location)
-            time.sleep(REQUEST_PAUSE_SECONDS)
-            bike_seconds = _route_seconds("cycling", *location)
-            time.sleep(REQUEST_PAUSE_SECONDS)
+            walk_seconds, bike_seconds = route_times(*location)
             api_calls += 2
             cache[location] = (walk_seconds, bike_seconds)
             if walk_seconds is not None:

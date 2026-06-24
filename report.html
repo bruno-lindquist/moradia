@@ -147,7 +147,9 @@
       <tr>
         <th></th><th>#</th><th>Score</th><th>Total</th><th>Dist.</th>
         <th title="Tempo a pé · de bike até o shopping">🚶🚴</th>
-        <th>Qt.</th><th>Área</th><th></th><th></th><th></th><th title="Piscina">🏊</th><th title="Academia">🏋️</th><th title="Bicicletário">🚲</th><th title="Cama">🛌🏻</th><th title="Fogão">🔥</th><th title="Geladeira">❄️</th><th title="Guarda-roupas">👕</th><th title="Armário cozinha">🥂</th><th title="Ar-condicionado">𖣘</th><th title="Micro-ondas">📡</th><th title="Air fryer">🍟</th><th title="Workspace">💻</th><th></th><th style="width: 300px;">Endereço</th><th>Cód.</th><th></th>
+        <th>Qt.</th><th>Área</th><th></th><th></th><th></th>
+        {% for amenity in amenities %}<th title="{{ amenity.label }}">{{ amenity.icon }}</th>{% endfor %}
+        <th></th><th style="width: 300px;">Endereço</th><th>Cód.</th><th></th>
       </tr>
     </thead>
     <tbody></tbody>
@@ -166,6 +168,9 @@
     const DATA = {{ data | tojson }};
     const REFERENCE = DATA.reference;
     const HIGHLIGHT_RATING = {{ highlight_rating }};  // nota a partir da qual destaca linha/pin
+    // Amenidades exibidas (key/icon/label), na ordem da fonte unica (amenities.py do back).
+    // Usadas para montar as colunas da tabela, suas celulas e a lista do popup.
+    const AMENITIES = {{ amenities | tojson }};
     const LAST_CLICKED_KEY = 'moradia-ultima-linha-clicada';  // id salvo no localStorage
 
     // Cor do pin conforme o score: verde (bom) -> ambar -> vermelho (ruim).
@@ -273,22 +278,11 @@
       const furnished = property.furnished === 1 ? ' · mobiliado'
                       : property.furnished === 0 ? ' · sem mobília' : '';
       const floor = property.floor != null ? ' · ' + property.floor + 'º andar' : '';
-      // amenidades presentes (so as marcadas como "tem" = 1)
-      const amenities = [
-        property.pool === 1 ? '🏊 piscina' : '',
-        property.gym === 1 ? '🏋️ academia' : '',
-        property.bike === 1 ? '🚲 bicicletário' : '',
-        property.bed === 1 ? '🛌🏻 cama' : '',
-        property.stove === 1 ? '🔥 fogão' : '',
-        property.fridge === 1 ? '❄️ geladeira' : '',
-        property.wardrobe === 1 ? '👕 guarda-roupas' : '',
-        property.kitchen === 1 ? '🥂 armário cozinha' : '',
-        property.ac === 1 ? '𖣘 ar-condicionado' : '',
-        property.microwave === 1 ? '📡 micro-ondas' : '',
-        property.airfryer === 1 ? '🍟 air fryer' : '',
-        property.workspace === 1 ? '💻 workspace' : '',
-      ].filter(Boolean);
-      const amenityLine = amenities.length ? amenities.join(' · ') + '<br>' : '';
+      // amenidades presentes (so as marcadas como "tem" = 1), derivadas da fonte unica
+      const present = AMENITIES
+        .filter(function (amenity) { return property[amenity.key] === 1; })
+        .map(function (amenity) { return amenity.icon + ' ' + amenity.label.toLowerCase(); });
+      const amenityLine = present.length ? present.join(' · ') + '<br>' : '';
       return '<b>#' + position + ' — score ' + property.score + '</b><br>' +
              total + ' (' + property.price_per_m2 + '/m²)<br>' +
              property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m², ' + property.parking + ' vaga(s)' + furnished + '<br>' +
@@ -500,19 +494,10 @@
         tr.appendChild(amenityCell(property, 'furnished', '🛋️', 'Mobiliado'));
         const goodFloor = property.floor != null && property.floor >= 4;
         tr.appendChild(extraCell('↑' + property.floor, 'Andar ' + property.floor + 'º', goodFloor, property.floor != null ? property.floor : -1));
-        // Amenidades manuais (clicaveis): piscina, academia, bicicletario
-        tr.appendChild(amenityCell(property, 'pool', '🏊', 'Piscina'));
-        tr.appendChild(amenityCell(property, 'gym', '🏋️', 'Academia'));
-        tr.appendChild(amenityCell(property, 'bike', '🚲', 'Bicicletário'));
-        tr.appendChild(amenityCell(property, 'bed', '🛌🏻', 'Cama'));
-        tr.appendChild(amenityCell(property, 'stove', '🔥', 'Fogão'));
-        tr.appendChild(amenityCell(property, 'fridge', '❄️', 'Geladeira'));
-        tr.appendChild(amenityCell(property, 'wardrobe', '👕', 'Guarda-roupas'));
-        tr.appendChild(amenityCell(property, 'kitchen', '🥂', 'Armário cozinha'));
-        tr.appendChild(amenityCell(property, 'ac', '𖣘', 'Ar-condicionado'));
-        tr.appendChild(amenityCell(property, 'microwave', '📡', 'Micro-ondas'));
-        tr.appendChild(amenityCell(property, 'airfryer', '🍟', 'Air fryer'));
-        tr.appendChild(amenityCell(property, 'workspace', '💻', 'Workspace'));
+        // Amenidades manuais (clicaveis): derivadas da fonte unica (mesma ordem do cabecalho).
+        AMENITIES.forEach(function (amenity) {
+          tr.appendChild(amenityCell(property, amenity.key, amenity.icon, amenity.label));
+        });
         // variacao: seta + valor (↓ caiu / ↑ subiu); estavel/novo -> vazio
         const changed = property.change.startsWith('subiu') || property.change.startsWith('caiu');
         const arrow = property.change.startsWith('caiu') ? '↓' : '↑';

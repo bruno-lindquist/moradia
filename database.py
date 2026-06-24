@@ -8,6 +8,7 @@
 import sqlite3
 from datetime import datetime
 
+import amenities
 import config
 
 
@@ -88,60 +89,35 @@ def create_tables(connection):
 def _migrate_property_columns(connection):
     # Bancos criados antes destas colunas nao as tem. ALTER TABLE so adiciona a coluna
     # (nao apaga nada). Idempotente: so age se a coluna ainda nao existir.
-    columns = [row["name"] for row in connection.execute("PRAGMA table_info(imoveis)")]
-    if "ativo" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1")
-    if "preferido" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN preferido INTEGER NOT NULL DEFAULT 0")
-    if "mobiliado" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN mobiliado INTEGER")
-    # flag: mobiliado foi definido manualmente no relatorio? (1 = scraping nao sobrescreve)
-    if "mobiliado_manual" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN mobiliado_manual INTEGER NOT NULL DEFAULT 0")
-    if "andar" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN andar INTEGER")
-    if "aceita_pet" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN aceita_pet INTEGER")
-    # Amenidades de condominio, marcadas manualmente (1=tem, 0=nao tem, NULL=nao verificado)
-    if "academia" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN academia INTEGER")
-    if "piscina" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN piscina INTEGER")
-    if "bicicletario" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN bicicletario INTEGER")
-    if "sauna" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN sauna INTEGER")
-    # Amenidades de mobilia/equipamento, marcadas manualmente (1=tem, 0=nao, NULL=nao verificado)
-    if "cama" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN cama INTEGER")
-    if "fogao" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN fogao INTEGER")
-    if "geladeira" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN geladeira INTEGER")
-    if "guarda_roupa" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN guarda_roupa INTEGER")
-    if "armario_cozinha" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN armario_cozinha INTEGER")
-    if "ar_condicionado" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN ar_condicionado INTEGER")
-    if "microondas" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN microondas INTEGER")
-    if "airfryer" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN airfryer INTEGER")
-    if "workspace" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN workspace INTEGER")
-    if "detalhado" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN detalhado INTEGER NOT NULL DEFAULT 0")
+    columns = {row["name"] for row in connection.execute("PRAGMA table_info(imoveis)")}
+
+    # Colunas que nao sao amenidades genericas (tem regra/default proprio).
+    base_columns = [
+        ("ativo", "INTEGER NOT NULL DEFAULT 1"),
+        ("preferido", "INTEGER NOT NULL DEFAULT 0"),
+        ("mobiliado", "INTEGER"),
+        # flag: mobiliado foi definido manualmente no relatorio? (1 = scraping nao sobrescreve)
+        ("mobiliado_manual", "INTEGER NOT NULL DEFAULT 0"),
+        ("andar", "INTEGER"),
+        ("aceita_pet", "INTEGER"),
+        ("detalhado", "INTEGER NOT NULL DEFAULT 0"),
+        # Tempo de deslocamento ate a referencia (Shopping Morumbi), em segundos, calculado
+        # via OSRM por commute.py. NULL = ainda nao calculado.
+        ("walk_seconds", "INTEGER"),
+        ("bike_seconds", "INTEGER"),
+    ]
+    # Amenidades manuais (1=tem, 0=nao tem, NULL=nao verificado): derivadas da fonte unica.
+    amenity_columns = [(amenity["column"], "INTEGER") for amenity in amenities.AMENITIES]
+
+    for name, definition in base_columns + amenity_columns:
+        if name not in columns:
+            connection.execute(f"ALTER TABLE imoveis ADD COLUMN {name} {definition}")
+
+    # 'nota' fica fora do loop por causa do efeito colateral: ao cria-la pela 1a vez,
+    # converte preferidos existentes em nota 5 (nao perde as escolhas ja feitas).
     if "nota" not in columns:
         connection.execute("ALTER TABLE imoveis ADD COLUMN nota INTEGER NOT NULL DEFAULT 0")
-        # converte preferidos existentes em nota 5 (nao perde as escolhas ja feitas)
         connection.execute("UPDATE imoveis SET nota = 5 WHERE preferido = 1")
-    # Tempo de deslocamento ate a referencia (Shopping Morumbi), em segundos, calculado
-    # via OSRM por commute.py. NULL = ainda nao calculado. So preenchido para imoveis com nota.
-    if "walk_seconds" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN walk_seconds INTEGER")
-    if "bike_seconds" not in columns:
-        connection.execute("ALTER TABLE imoveis ADD COLUMN bike_seconds INTEGER")
 
 
 def deactivate_property(connection, property_id):
@@ -167,13 +143,9 @@ def set_rating(connection, property_id, rating):
 
 # Colunas marcaveis manualmente no relatorio. Allowlist tambem protege contra SQL
 # injection: o nome da coluna nao pode vir como '?', entao validamos antes de interpolar.
-# 'mobiliado' tambem vem do scraping; ao marca-lo aqui, ligamos a flag mobiliado_manual
-# para o scraping nao sobrescrever depois.
-AMENITY_COLUMNS = {
-    "academia", "piscina", "bicicletario", "sauna", "mobiliado",
-    "cama", "fogao", "geladeira", "guarda_roupa", "armario_cozinha", "ar_condicionado",
-    "microondas", "airfryer", "workspace",
-}
+# Derivada da fonte unica (amenities.py) + 'mobiliado' (tem regra propria, ver set_amenity):
+# tambem vem do scraping; ao marca-lo aqui, ligamos a flag mobiliado_manual.
+AMENITY_COLUMNS = {amenity["column"] for amenity in amenities.AMENITIES} | {"mobiliado"}
 
 
 def set_amenity(connection, property_id, amenity, value):

@@ -8,17 +8,16 @@
 #   - distancia    (35 pts) -> faixa 0,3 km (cheio) a 3 km (zero); mais perto pontua mais
 #   - mobiliado    (10 pts) -> ponto cheio se for mobiliado
 #   - vaga          (6 pts) -> ponto cheio se tiver 1+ vaga de garagem
-#   - piscina       (5 pts) -> ponto cheio se tem piscina (marcada manualmente)
-#   - academia      (3 pts) -> ponto cheio se tem academia
-#   - sauna         (3 pts) -> ponto cheio se tem sauna
 #   - andar 4o+     (3 pts) -> ponto cheio se o andar for 4o ou acima
 #   - nota manual   (5 pts) -> sua avaliacao de 1 a 5 estrelas (normalizada)
-#   - cama, fogao, geladeira, guarda-roupa, armario cozinha, ar-condicionado,
-#     micro-ondas, air fryer, workspace (5 pts cada)
-#       -> mobilia/equipamento, marcados manualmente no relatorio
+#   - amenidades manuais (piscina, academia, sauna, cama, fogao, ...) -> pontos definidos
+#     na fonte unica amenities.AMENITIES (campo "points"); ponto cheio se marcado "tem".
 # Imoveis ATIVOS fora da faixa (preco ou distancia) sao ELIMINADOS do ranking.
-# "aceita pet" e "bicicletario" sao apenas EXIBIDOS na tabela; nao entram no score.
+# "aceita pet" e "bicicletario" sao apenas EXIBIDOS na tabela; nao entram no score
+# (bicicletario tem points=0 na fonte unica).
 
+import amenities
+import config
 import database
 
 # Faixas fixas: o limite "bom" da pontos cheios, o limite "ruim" da zero.
@@ -27,26 +26,14 @@ PRICE_MAX = 3200            # custo mensal (R$) -> zero pontos / acima disso eli
 DISTANCE_MIN = 0.3          # km do shopping -> pontuacao cheia
 DISTANCE_MAX = 3.0          # km do shopping -> zero pontos / acima disso elimina
 
-# Pontos maximos por criterio (somam 100).
+# Pontos dos criterios com logica propria (faixa fixa, flag). Os pontos das amenidades
+# manuais (piscina, academia, sauna, cama, ...) vem da fonte unica amenities.AMENITIES.
 POINTS_PRICE = 35
 POINTS_DISTANCE = 35
 POINTS_FURNISHED = 10
 POINTS_PARKING = 6
-POINTS_POOL = 5            # tem piscina
-POINTS_GYM = 3            # tem academia
-POINTS_SAUNA = 3
 POINTS_FLOOR = 3          # andar 4o ou acima
 POINTS_RATING = 5         # nota manual de 1 a 5 (sua avaliacao)
-# Amenidades de mobilia/equipamento (5 pts cada). Com elas o score MAXIMO sobe para 130.
-POINTS_BED = 5            # cama
-POINTS_STOVE = 5          # fogao
-POINTS_FRIDGE = 5         # geladeira
-POINTS_WARDROBE = 5       # guarda-roupa
-POINTS_KITCHEN = 5        # armario de cozinha
-POINTS_AC = 5             # ar-condicionado
-POINTS_MICROWAVE = 5      # micro-ondas
-POINTS_AIRFRYER = 5       # air fryer
-POINTS_WORKSPACE = 5      # espaco de trabalho
 
 HIGHLIGHT_RATING = 4        # nota a partir da qual destaca a linha e o pin
 
@@ -76,13 +63,13 @@ def load_properties(connection, operation, include_inactive=False):
     # include_inactive=True traz tambem os ocultos (ativo=0), para o relatorio
     # poder mostrar "so os ocultos" e oferecer restaurar.
     active_filter = "" if include_inactive else "AND ativo = 1"
+    # Colunas das amenidades vem da fonte unica (amenities.py), na mesma ordem.
+    amenity_columns = ", ".join(amenity["column"] for amenity in amenities.AMENITIES)
     rows = connection.execute(
         f"""
         SELECT id, titulo, endereco, area_m2, quartos, vagas, distancia_km, url,
                latitude, longitude, nota, mobiliado, andar, aceita_pet, ativo,
-               academia, piscina, bicicletario, sauna,
-               cama, fogao, geladeira, guarda_roupa, armario_cozinha, ar_condicionado,
-               microondas, airfryer, workspace, walk_seconds, bike_seconds
+               walk_seconds, bike_seconds, {amenity_columns}
         FROM imoveis
         WHERE operacao = ?
           {active_filter}
@@ -101,48 +88,37 @@ def load_properties(connection, operation, include_inactive=False):
             continue
         if not row["area_m2"] or not row["distancia_km"]:
             continue
-        properties.append(
-            {
-                "id": row["id"],
-                "title": row["titulo"],
-                "address": row["endereco"],
-                "area_m2": row["area_m2"],
-                "bedrooms": row["quartos"],
-                "parking": row["vagas"],
-                "distance_km": row["distancia_km"],
-                "url": row["url"],
-                "latitude": row["latitude"],
-                "longitude": row["longitude"],
-                "rating": row["nota"],
-                "furnished": row["mobiliado"],
-                "floor": row["andar"],
-                "accepts_pet": row["aceita_pet"],
-                "active": row["ativo"],
-                "gym": row["academia"],
-                "pool": row["piscina"],
-                "bike": row["bicicletario"],
-                "sauna": row["sauna"],
-                "bed": row["cama"],
-                "stove": row["fogao"],
-                "fridge": row["geladeira"],
-                "wardrobe": row["guarda_roupa"],
-                "kitchen": row["armario_cozinha"],
-                "ac": row["ar_condicionado"],
-                "microwave": row["microondas"],
-                "airfryer": row["airfryer"],
-                "workspace": row["workspace"],
-                "walk_seconds": row["walk_seconds"],
-                "bike_seconds": row["bike_seconds"],
-                "price": value,
-                "total_price": total_value,
-                # cost = valor TOTAL cheio (aluguel + condominio + IPTU). E o que baseia
-                # o score: ranqueia pelo que se paga no mes, nao pelo custo por m2.
-                # Se o site nao informou o total, usa o aluguel base como aproximacao.
-                "cost": (total_value or value),
-                # price_per_m2 fica so para exibir na coluna "R$/m2" do relatorio.
-                "price_per_m2": (total_value or value) / row["area_m2"],
-            }
-        )
+        property = {
+            "id": row["id"],
+            "title": row["titulo"],
+            "address": row["endereco"],
+            "area_m2": row["area_m2"],
+            "bedrooms": row["quartos"],
+            "parking": row["vagas"],
+            "distance_km": row["distancia_km"],
+            "url": row["url"],
+            "latitude": row["latitude"],
+            "longitude": row["longitude"],
+            "rating": row["nota"],
+            "furnished": row["mobiliado"],
+            "floor": row["andar"],
+            "accepts_pet": row["aceita_pet"],
+            "active": row["ativo"],
+            "walk_seconds": row["walk_seconds"],
+            "bike_seconds": row["bike_seconds"],
+            "price": value,
+            "total_price": total_value,
+            # cost = valor TOTAL cheio (aluguel + condominio + IPTU). E o que baseia
+            # o score: ranqueia pelo que se paga no mes, nao pelo custo por m2.
+            # Se o site nao informou o total, usa o aluguel base como aproximacao.
+            "cost": (total_value or value),
+            # price_per_m2 fica so para exibir na coluna "R$/m2" do relatorio.
+            "price_per_m2": (total_value or value) / row["area_m2"],
+        }
+        # amenidades (fonte unica): traduz coluna PT do banco -> chave EN do dict.
+        for amenity in amenities.AMENITIES:
+            property[amenity["key"]] = row[amenity["column"]]
+        properties.append(property)
     return properties
 
 
@@ -171,19 +147,6 @@ def compute_scores(properties):
         bonus_parking = 1 if (property.get("parking") or 0) >= 1 else 0
         floor = property.get("floor")
         bonus_floor = 1 if (floor is not None and floor >= MIN_GOOD_FLOOR) else 0
-        # amenidades manuais: ponto cheio so quando marcado como "tem" (1)
-        bonus_pool = 1 if property.get("pool") == 1 else 0
-        bonus_gym = 1 if property.get("gym") == 1 else 0
-        bonus_sauna = 1 if property.get("sauna") == 1 else 0
-        bonus_bed = 1 if property.get("bed") == 1 else 0
-        bonus_stove = 1 if property.get("stove") == 1 else 0
-        bonus_fridge = 1 if property.get("fridge") == 1 else 0
-        bonus_wardrobe = 1 if property.get("wardrobe") == 1 else 0
-        bonus_kitchen = 1 if property.get("kitchen") == 1 else 0
-        bonus_ac = 1 if property.get("ac") == 1 else 0
-        bonus_microwave = 1 if property.get("microwave") == 1 else 0
-        bonus_airfryer = 1 if property.get("airfryer") == 1 else 0
-        bonus_workspace = 1 if property.get("workspace") == 1 else 0
         # nota manual (1..5) normalizada para 0..1; sem nota (0) nao soma nada.
         # nota -1 = "visto" (apenas marcacao, sem estrela) tambem nao soma -> trata como 0.
         bonus_rating = max(0, property.get("rating") or 0) / 5
@@ -192,21 +155,13 @@ def compute_scores(properties):
             + POINTS_DISTANCE * _fixed_fraction(property["distance_km"], DISTANCE_MIN, DISTANCE_MAX)
             + POINTS_FURNISHED * bonus_furnished
             + POINTS_PARKING * bonus_parking
-            + POINTS_POOL * bonus_pool
-            + POINTS_GYM * bonus_gym
-            + POINTS_SAUNA * bonus_sauna
             + POINTS_FLOOR * bonus_floor
             + POINTS_RATING * bonus_rating
-            + POINTS_BED * bonus_bed
-            + POINTS_STOVE * bonus_stove
-            + POINTS_FRIDGE * bonus_fridge
-            + POINTS_WARDROBE * bonus_wardrobe
-            + POINTS_KITCHEN * bonus_kitchen
-            + POINTS_AC * bonus_ac
-            + POINTS_MICROWAVE * bonus_microwave
-            + POINTS_AIRFRYER * bonus_airfryer
-            + POINTS_WORKSPACE * bonus_workspace
         )
+        # amenidades manuais (fonte unica): ponto cheio so quando marcado como "tem" (1).
+        for amenity in amenities.AMENITIES:
+            if property.get(amenity["key"]) == 1:
+                score += amenity["points"]
         property["score"] = round(score, 1)
     properties.sort(key=lambda p: p["score"], reverse=True)
     return properties
@@ -242,8 +197,7 @@ def _print_ranking(connection, title, properties):
         print(f"     {property['bedrooms']} quarto(s), {property['area_m2']:.0f} m2, {property.get('parking') or 0} vaga(s)")
         if property["address"]:
             print(f"     {property['address']}")
-        clean_url = property["url"].split("?")[0] if property["url"] else ""
-        print(f"     {clean_url}")
+        print(f"     {config.clean_url(property['url'])}")
 
 
 def main():
