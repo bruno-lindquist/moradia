@@ -156,8 +156,8 @@
   </table>
 
   <p class="footer">
-    Ordenado por custo-benefício (soma de pontos, máx. 130: preço 35 + distância 35 +
-    mobiliado 10 + nota 5 + vaga 6 + amenidades 5 cada). Clique num cabeçalho para reordenar.
+    Ordenado por custo-benefício (soma de pontos, máx. {{ max_score }}: preço + distância +
+    mobiliado + vaga + andar + nota + amenidades). Clique num cabeçalho para reordenar.
     Colunas de ícone: 🅿️ vaga · 🛋️ mobiliado · ↑ andar 4º+.
     Gerado de moradia.db — rode <code>python collect.py</code> para atualizar.
   </p>
@@ -172,13 +172,14 @@
     // Usadas para montar as colunas da tabela, suas celulas e a lista do popup.
     const AMENITIES = {{ amenities | tojson }};
     const LAST_CLICKED_KEY = 'moradia-ultima-linha-clicada';  // id salvo no localStorage
+    const MAX_SCORE = {{ max_score }};  // score maximo possivel (calculado no back, ranking.py)
 
     // Cor do pin conforme o score: verde (bom) -> ambar -> vermelho (ruim).
     // Mesmas cores de acento da paleta (verde/ambar/vermelho do tema).
-    // Cortes nos tercos da escala atual (score maximo = 145): 145*2/3 e 145*1/3.
+    // Cortes nos tercos da escala (derivados de MAX_SCORE, nunca desencontram).
     function colorByScore(score) {
-      if (score >= 97) return '#3fc97e';
-      if (score >= 48) return '#e0a92e';
+      if (score >= MAX_SCORE * 2 / 3) return '#3fc97e';
+      if (score >= MAX_SCORE / 3) return '#e0a92e';
       return '#e0625a';
     }
 
@@ -647,36 +648,40 @@
       render();
     });
 
-    // Desativa um anuncio: avisa o servidor (grava ativo=0) e some com a linha + pin.
-    function deactivate(id, tr, marker) {
-      fetch('/deactivate/' + id, { method: 'POST' })
+    // POST padrao para o servidor (app.py): trata o erro de forma uniforme. Chama onOk
+    // com o JSON da resposta (ou null em 204 sem corpo). Mostra um alerta unico em falha.
+    function postAction(url, onOk) {
+      fetch(url, { method: 'POST' })
         .then(function (response) {
           if (!response.ok) throw new Error('falha');
-          const property = DATA.rentals.find(function (p) { return p.id === id; });
-          if (property) property.active = 0;  // mantem o DATA coerente para o toggle "Só ocultos"
-          tr.remove();
-          if (marker) pinLayer.removeLayer(marker);
-          showToast('Anúncio escondido');
+          return response.status === 204 ? null : response.json();
         })
+        .then(onOk)
         .catch(function () {
-          alert('Nao foi possivel desativar. O servidor (app.py) esta rodando?');
+          alert('Não foi possível salvar. O servidor (app.py) está rodando?');
         });
+    }
+
+    // Desativa um anuncio: avisa o servidor (grava ativo=0) e some com a linha + pin.
+    function deactivate(id, tr, marker) {
+      postAction('/deactivate/' + id, function () {
+        const property = DATA.rentals.find(function (p) { return p.id === id; });
+        if (property) property.active = 0;  // mantem o DATA coerente para o toggle "Só ocultos"
+        tr.remove();
+        if (marker) pinLayer.removeLayer(marker);
+        showToast('Anúncio escondido');
+      });
     }
 
     // Restaura um anuncio oculto: avisa o servidor (grava ativo=1), atualiza o DATA
     // e re-renderiza (a linha sai da lista "só ocultos").
     function reactivate(id) {
-      fetch('/reactivate/' + id, { method: 'POST' })
-        .then(function (response) {
-          if (!response.ok) throw new Error('falha');
-          const property = DATA.rentals.find(function (p) { return p.id === id; });
-          if (property) property.active = 1;
-          render();
-          showToast('Anúncio restaurado');
-        })
-        .catch(function () {
-          alert('Nao foi possivel restaurar. O servidor (app.py) esta rodando?');
-        });
+      postAction('/reactivate/' + id, function () {
+        const property = DATA.rentals.find(function (p) { return p.id === id; });
+        if (property) property.active = 1;
+        render();
+        showToast('Anúncio restaurado');
+      });
     }
 
     // Desenha as estrelas (ou o traco de "visto") refletindo property.rating e liga os cliques.
@@ -719,38 +724,22 @@
 
     // Grava a nota no servidor e atualiza estrelas + destaque da linha.
     function setRating(property, rating, td, tr) {
-      fetch('/rate/' + property.id + '/' + rating, { method: 'POST' })
-        .then(function (response) {
-          if (!response.ok) throw new Error('falha');
-          return response.json();
-        })
-        .then(function (result) {
-          property.rating = result.rating;
-          buildStars(td, property, tr);
-          tr.classList.toggle('high-rating', property.rating >= HIGHLIGHT_RATING);
-          showToast('Nota salva');
-        })
-        .catch(function () {
-          alert('Nao foi possivel salvar a nota. O servidor (app.py) esta rodando?');
-        });
+      postAction('/rate/' + property.id + '/' + rating, function (result) {
+        property.rating = result.rating;
+        buildStars(td, property, tr);
+        tr.classList.toggle('high-rating', property.rating >= HIGHLIGHT_RATING);
+        showToast('Nota salva');
+      });
     }
 
     // Grava a amenidade no servidor (1/0/null) e redesenha o icone.
     function setAmenity(property, key, value, td, icon) {
       const param = value == null ? 'null' : value;  // null vira texto "null" na URL
-      fetch('/amenity/' + property.id + '/' + key + '/' + param, { method: 'POST' })
-        .then(function (response) {
-          if (!response.ok) throw new Error('falha');
-          return response.json();
-        })
-        .then(function (result) {
-          property[key] = result.value;
-          drawAmenity(td, property[key], icon);
-          showToast('Amenidade salva');
-        })
-        .catch(function () {
-          alert('Nao foi possivel salvar. O servidor (app.py) esta rodando?');
-        });
+      postAction('/amenity/' + property.id + '/' + key + '/' + param, function (result) {
+        property[key] = result.value;
+        drawAmenity(td, property[key], icon);
+        showToast('Amenidade salva');
+      });
     }
 
     render();

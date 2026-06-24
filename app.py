@@ -79,8 +79,7 @@ def _rental_dict(connection, property):
         "bike_min": _to_minutes(property.get("bike_seconds")),
         "change": ranking.price_change(connection, property["id"]),
     }
-    for amenity in amenities.AMENITIES:
-        rental[amenity["key"]] = property.get(amenity["key"])
+    amenities.copy_keys(property, rental)
     return rental
 
 
@@ -125,6 +124,7 @@ def index():
         "report.html",
         data=data,
         highlight_rating=ranking.HIGHLIGHT_RATING,
+        max_score=ranking.MAX_SCORE,
         amenities=front_amenities,
     )
 

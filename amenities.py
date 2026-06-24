@@ -28,3 +28,17 @@ AMENITIES = [
     {"key": "airfryer",  "column": "airfryer",        "points": 5, "icon": "🍟",  "label": "Air fryer",       "front": True},
     {"key": "workspace", "column": "workspace",       "points": 5, "icon": "💻",  "label": "Workspace",       "front": True},
 ]
+
+
+def read_from_row(row, target):
+    # Le cada amenidade de uma linha do banco (coluna em portugues) e grava no dict
+    # target com a chave em ingles. Usado ao montar imoveis a partir do SQL.
+    for amenity in AMENITIES:
+        target[amenity["key"]] = row[amenity["column"]]
+
+
+def copy_keys(source, target):
+    # Copia as chaves de amenidade (em ingles) de um dict para outro. Usado ao reformatar
+    # um imovel ja em ingles para enviar ao front.
+    for amenity in AMENITIES:
+        target[amenity["key"]] = source.get(amenity["key"])

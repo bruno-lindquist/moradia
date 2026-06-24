@@ -1,7 +1,7 @@
 # ENTRYPOINT 2: le o banco, calcula custo-beneficio e mostra o ranking + variacoes de preco.
 # Rode com:  python ranking.py
 #
-# Score de custo-beneficio = SOMA DE PONTOS com faixas FIXAS (0 a 145, maior = melhor).
+# Score de custo-beneficio = SOMA DE PONTOS com faixas FIXAS (0 a MAX_SCORE, maior = melhor).
 # As faixas sao fixas (nao dependem dos outros imoveis), entao o score de um imovel nao
 # muda quando outro entra/sai da lista -- da pra comparar o ranking de dias diferentes.
 #   - preco        (35 pts) -> faixa R$ 1.800 (cheio) a R$ 3.200 (zero); mais barato pontua mais
@@ -34,6 +34,14 @@ POINTS_FURNISHED = 10
 POINTS_PARKING = 6
 POINTS_FLOOR = 3          # andar 4o ou acima
 POINTS_RATING = 5         # nota manual de 1 a 5 (sua avaliacao)
+
+# Score maximo possivel: criterios especiais + soma dos pontos das amenidades (fonte unica).
+# Calculado (nao escrito a mao) para nao desencontrar quando um peso muda.
+MAX_SCORE = (
+    POINTS_PRICE + POINTS_DISTANCE + POINTS_FURNISHED + POINTS_PARKING
+    + POINTS_FLOOR + POINTS_RATING
+    + sum(amenity["points"] for amenity in amenities.AMENITIES)
+)
 
 HIGHLIGHT_RATING = 4        # nota a partir da qual destaca a linha e o pin
 
@@ -116,8 +124,7 @@ def load_properties(connection, operation, include_inactive=False):
             "price_per_m2": (total_value or value) / row["area_m2"],
         }
         # amenidades (fonte unica): traduz coluna PT do banco -> chave EN do dict.
-        for amenity in amenities.AMENITIES:
-            property[amenity["key"]] = row[amenity["column"]]
+        amenities.read_from_row(row, property)
         properties.append(property)
     return properties
 
