@@ -1,6 +1,8 @@
-# ENTRYPOINT 5 (correcao pontual): reabre a pagina de cada imovel COM NOTA, le a
-# coordenada exata fornecida pelo QuintoAndar (mais precisa que geocodificar pelo nome
-# da rua) e atualiza latitude/longitude, distancia e os tempos a pe/bike no banco.
+# ENTRYPOINT 5 (correcao pontual): reabre a pagina de cada imovel COM NOTA e:
+#  - se o anuncio saiu do ar, marca o imovel como inativo (ativo = 0);
+#  - se continua no ar, le a coordenada exata fornecida pelo QuintoAndar (mais precisa
+#    que geocodificar pelo nome da rua) e atualiza latitude/longitude, distancia e os
+#    tempos a pe/bike no banco.
 # Rode com:  python fix_coords.py
 #
 # Por que existe: enderecos sem numero (a maioria, pois o site nao expoe o numero)
@@ -23,9 +25,14 @@ def _rated_properties(connection):
 
 
 def fix_one(connection, page, property):
-    # Reabre a pagina, le a coordenada do site e, se mudou, atualiza tudo no banco.
-    # Retorna "ok", "sem-coord" ou "inalterado".
+    # Reabre a pagina. Se o anuncio saiu do ar, marca como inativo. Senao, le a
+    # coordenada do site e, se mudou, atualiza tudo no banco.
+    # Retorna "inativo", "ok", "sem-coord" ou "inalterado".
     scraper._scrape_details(page, property)  # popula property["latitude"]/["longitude"] do site
+    if scraper.is_unavailable(page):
+        database.deactivate_property(connection, property["id"])
+        return "inativo"
+
     latitude = property.get("latitude")
     longitude = property.get("longitude")
     if latitude is None:
@@ -60,16 +67,19 @@ def main(limit=None):
         properties = properties[:limit]
     print(f"{len(properties)} imovel(is) com nota para corrigir (maior score primeiro).")
 
-    counts = {"ok": 0, "sem-coord": 0, "inalterado": 0}
+    counts = {"ok": 0, "sem-coord": 0, "inalterado": 0, "inativo": 0}
     with scraper.open_browser() as page:
         for property in properties:
             print(f"  score {property['score']:5} | {property['id']} | {property['address']}")
             result = fix_one(connection, page, property)
+            if result == "inativo":
+                print("      saiu do ar -> marcado como inativo")
             counts[result] += 1
 
     connection.close()
     print(f"Pronto: {counts['ok']} corrigidos, {counts['inalterado']} ja certos, "
-          f"{counts['sem-coord']} sem coordenada no site. Banco: {config.DB_PATH}.")
+          f"{counts['sem-coord']} sem coordenada no site, {counts['inativo']} inativos. "
+          f"Banco: {config.DB_PATH}.")
 
 
 if __name__ == "__main__":

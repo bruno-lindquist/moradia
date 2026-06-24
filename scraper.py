@@ -95,6 +95,12 @@ def _scrape_details(page, property):
         pass  # deixa os campos como estao; nao marca detailed -> tenta de novo na proxima
 
 
+def is_unavailable(page):
+    # True se o imovel saiu do ar. Ao abrir /imovel/<id>, o QuintoAndar redireciona
+    # para /indisponivel/<id>/alugar quando o anuncio nao existe mais.
+    return "/indisponivel/" in page.url
+
+
 def _parse_coordinates(page):
     # Le a coordenada do imovel do JSON __NEXT_DATA__ embutido na pagina.
     # Retorna (latitude, longitude) ou (None, None) se nao encontrar.
