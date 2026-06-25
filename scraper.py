@@ -90,15 +90,31 @@ def _scrape_details(page, property):
         if latitude is not None:
             property["latitude"] = latitude
             property["longitude"] = longitude
+        # Valores exatos da pagina individual (rentPrice/totalCost), mais confiaveis
+        # que o texto do card. Sobrescrevem o que veio da listagem, quando presentes.
+        price, total_price = _parse_prices(page)
+        if price is not None:
+            property["price"] = price
+        if total_price is not None:
+            property["total_price"] = total_price
         property["detailed"] = 1  # sucesso: nao precisa reabrir a pagina deste imovel
     except Exception:
         pass  # deixa os campos como estao; nao marca detailed -> tenta de novo na proxima
 
 
 def is_unavailable(page):
-    # True se o imovel saiu do ar. Ao abrir /imovel/<id>, o QuintoAndar redireciona
-    # para /indisponivel/<id>/alugar quando o anuncio nao existe mais.
-    return "/indisponivel/" in page.url
+    # True se o imovel saiu do ar. Dois jeitos, cada um com seu sinal:
+    #  - removido: o title da pagina vira "Imovel indisponivel - QuintoAndar";
+    #  - suspenso (ex.: dono reformando): o corpo exibe "Esse imovel esta indisponivel".
+    # (A URL as vezes redireciona para /indisponivel/, mas e instavel; nao confiamos nela.)
+    try:
+        titulo = page.title().lower()
+        corpo = page.inner_text("body").lower()
+    except Exception:
+        return False  # pagina nao carregou: nao desativa (evita falso-positivo)
+    if titulo.startswith("imóvel indisponível") or titulo.startswith("imovel indisponivel"):
+        return True
+    return "imóvel está indisponível" in corpo or "imovel esta indisponivel" in corpo
 
 
 def _parse_coordinates(page):
@@ -116,6 +132,24 @@ def _parse_coordinates(page):
     except Exception:
         pass
     return None, None
+
+
+def _parse_prices(page):
+    # Le aluguel (rentPrice) e custo total (totalCost = aluguel+condominio+IPTU+taxa)
+    # do JSON __NEXT_DATA__ da pagina individual. Retorna (price, total_price) ou
+    # (None, None) por campo ausente. Numeros exatos, sem regex sobre texto de card.
+    try:
+        block = page.query_selector("#__NEXT_DATA__")
+        if not block:
+            return None, None
+        text = block.inner_text()
+        rent = re.search(r'"rentPrice"\s*:\s*(\d+)', text)
+        total = re.search(r'"totalCost"\s*:\s*(\d+)', text)
+        price = float(rent.group(1)) if rent else None
+        total_price = float(total.group(1)) if total else None
+        return price, total_price
+    except Exception:
+        return None, None
 
 
 def _parse_furnished(items):

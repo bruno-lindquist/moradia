@@ -1,12 +1,16 @@
-# ENTRYPOINT 5 (correcao pontual): reabre a pagina de cada imovel COM NOTA e:
-#  - se o anuncio saiu do ar, marca o imovel como inativo (ativo = 0);
-#  - se continua no ar, le a coordenada exata fornecida pelo QuintoAndar (mais precisa
-#    que geocodificar pelo nome da rua) e atualiza latitude/longitude, distancia e os
-#    tempos a pe/bike no banco.
+# ENTRYPOINT 5 (correcao pontual): reabre a pagina de CADA imovel (maior score
+# primeiro) e:
+#  - se o anuncio saiu do ar, marca o imovel como inativo (ativo = 0) e para por aqui;
+#  - se continua no ar, grava um snapshot do valor atual e atualiza a coordenada exata
+#    fornecida pelo QuintoAndar (mais precisa que geocodificar pelo nome da rua),
+#    a distancia e os tempos a pe/bike no banco.
 # Rode com:  python fix_coords.py
 #
 # Por que existe: enderecos sem numero (a maioria, pois o site nao expoe o numero)
 # geocodificavam para um ponto arbitrario da rua -- erro de ate ~1,5 km em ruas longas.
+
+import random
+import time
 
 import commute
 import config
@@ -15,23 +19,35 @@ import geo
 import ranking
 import scraper
 
+# Pausa extra entre imoveis (anti-bloqueio), alem das pausas internas do scraper.
+PAUSE_MIN_SECONDS = 3
+PAUSE_MAX_SECONDS = 9
 
-def _rated_properties(connection):
-    # Imoveis com nota (>=1), maior score primeiro, que tem URL para reabrir.
+
+def _all_properties(connection):
+    # Todos os imoveis com URL para reabrir, maior score primeiro.
     properties = ranking.compute_scores(
         ranking.load_properties(connection, "aluguel", include_inactive=True)
     )
-    return [p for p in properties if (p.get("rating") or 0) >= 1 and p.get("url")]
+    return [p for p in properties if p.get("url")]
 
 
 def fix_one(connection, page, property):
-    # Reabre a pagina. Se o anuncio saiu do ar, marca como inativo. Senao, le a
-    # coordenada do site e, se mudou, atualiza tudo no banco.
+    # Reabre a pagina. Se o anuncio saiu do ar, marca como inativo. Senao, grava um
+    # snapshot do valor atual e, se a coordenada mudou, atualiza coordenada/distancia/tempos.
     # Retorna "inativo", "ok", "sem-coord" ou "inalterado".
-    scraper._scrape_details(page, property)  # popula property["latitude"]/["longitude"] do site
+    scraper._scrape_details(page, property)  # popula coord, price e total_price do site
     if scraper.is_unavailable(page):
         database.deactivate_property(connection, property["id"])
         return "inativo"
+
+    # Snapshot do valor (mesmo que a coordenada nao mude, o preco pode ter mudado).
+    if property.get("price") is not None:
+        database.save_price(
+            connection, property["id"], property["price"],
+            property.get("total_price"), database.now_iso(),
+        )
+        connection.commit()
 
     latitude = property.get("latitude")
     longitude = property.get("longitude")
@@ -62,19 +78,21 @@ def fix_one(connection, page, property):
 
 def main(limit=None):
     connection = database.connect()
-    properties = _rated_properties(connection)
+    properties = _all_properties(connection)
     if limit:
         properties = properties[:limit]
-    print(f"{len(properties)} imovel(is) com nota para corrigir (maior score primeiro).")
+    print(f"{len(properties)} imovel(is) para verificar (maior score primeiro).")
 
     counts = {"ok": 0, "sem-coord": 0, "inalterado": 0, "inativo": 0}
     with scraper.open_browser() as page:
-        for property in properties:
+        for index, property in enumerate(properties):
             print(f"  score {property['score']:5} | {property['id']} | {property['address']}")
             result = fix_one(connection, page, property)
             if result == "inativo":
                 print("      saiu do ar -> marcado como inativo")
             counts[result] += 1
+            if index < len(properties) - 1:  # nao espera depois do ultimo
+                time.sleep(random.uniform(PAUSE_MIN_SECONDS, PAUSE_MAX_SECONDS))
 
     connection.close()
     print(f"Pronto: {counts['ok']} corrigidos, {counts['inalterado']} ja certos, "
