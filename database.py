@@ -138,11 +138,20 @@ def save_property(connection, property, now):
 
 
 def save_price(connection, property_id, value, total_value, now):
-    # Sempre INSERT: cada execucao deixa um snapshot, formando o historico.
+    # So grava um novo snapshot se o valor mudou em relacao ao ultimo: evita encher a
+    # tabela 'precos' com duplicatas a cada verificacao. O historico passa a conter so
+    # os pontos de mudanca. Retorna True se gravou, False se nada mudou.
+    last = connection.execute(
+        "SELECT valor, valor_total FROM precos WHERE imovel_id = ? ORDER BY id DESC LIMIT 1",
+        (property_id,),
+    ).fetchone()
+    if last is not None and last["valor"] == value and last["valor_total"] == total_value:
+        return False
     connection.execute(
         "INSERT INTO precos (imovel_id, valor, valor_total, coletado_em) VALUES (?, ?, ?, ?)",
         (property_id, value, total_value, now),
     )
+    return True
 
 
 def property_exists(connection, property_id):

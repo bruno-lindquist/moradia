@@ -20,16 +20,20 @@ import ranking
 import scraper
 
 # Pausa extra entre imoveis (anti-bloqueio), alem das pausas internas do scraper.
-PAUSE_MIN_SECONDS = 3
-PAUSE_MAX_SECONDS = 9
+PAUSE_MIN_SECONDS = 1
+PAUSE_MAX_SECONDS = 3
 
 
-def _all_properties(connection):
-    # Todos os imoveis com URL para reabrir, maior score primeiro.
+def _rated_properties(connection):
+    # Apenas imoveis com nota (>=1) e URL para reabrir, maior score primeiro.
+    # Inclui inativos (include_inactive=True) para detectar os que voltaram ao ar.
     properties = ranking.compute_scores(
         ranking.load_properties(connection, "aluguel", include_inactive=True)
     )
-    return [p for p in properties if p.get("url")]
+    return [
+        property for property in properties
+        if property.get("url") and (property.get("rating") or 0) >= 1
+    ]
 
 
 def fix_one(connection, page, property):
@@ -42,12 +46,13 @@ def fix_one(connection, page, property):
         return "inativo"
 
     # Snapshot do valor (mesmo que a coordenada nao mude, o preco pode ter mudado).
+    # save_price so grava se o valor mudou; comita apenas quando houve gravacao.
     if property.get("price") is not None:
-        database.save_price(
+        if database.save_price(
             connection, property["id"], property["price"],
             property.get("total_price"), database.now_iso(),
-        )
-        connection.commit()
+        ):
+            connection.commit()
 
     latitude = property.get("latitude")
     longitude = property.get("longitude")
@@ -78,10 +83,10 @@ def fix_one(connection, page, property):
 
 def main(limit=None):
     connection = database.connect()
-    properties = _all_properties(connection)
+    properties = _rated_properties(connection)
     if limit:
         properties = properties[:limit]
-    print(f"{len(properties)} imovel(is) para verificar (maior score primeiro).")
+    print(f"{len(properties)} imovel(is) com nota para verificar (maior score primeiro).")
 
     counts = {"ok": 0, "sem-coord": 0, "inalterado": 0, "inativo": 0}
     with scraper.open_browser() as page:
