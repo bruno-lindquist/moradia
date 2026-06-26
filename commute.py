@@ -11,6 +11,8 @@ import time
 import urllib.request
 import urllib.error
 
+from geopy.distance import distance as geopy_distance
+
 import config
 import database
 import ranking
@@ -22,13 +24,36 @@ OSRM_HOSTS = {
 }
 REQUEST_PAUSE_SECONDS = 1.0  # boa cidadania com o servidor publico
 
+# Estacoes de metro/CPTM (mesmo arquivo que o mapa usa). Carregado uma vez no modulo.
+TRANSIT_PATH = "transit.json"
 
-def _route_seconds(profile, origin_lat, origin_lon):
-    # Consulta o OSRM e retorna a duracao (segundos) da rota origem -> referencia.
+
+def _load_stations():
+    # Le as estacoes do transit.json: lista de (nome, lat, lon). Inclui metro E trem
+    # (CPTM), pois queremos a estacao de transporte mais proxima de qualquer tipo.
+    with open(TRANSIT_PATH, encoding="utf-8") as file:
+        transit = json.load(file)
+    return [(s["name"], s["lat"], s["lon"]) for s in transit["stations"]]
+
+
+STATIONS = _load_stations()
+
+
+def nearest_station(latitude, longitude):
+    # Estacao mais proxima em LINHA RETA (Haversine). So escolhe qual estacao; o tempo
+    # a pe real (rota) e calculado depois, so para essa uma. Retorna (nome, lat, lon).
+    return min(
+        STATIONS,
+        key=lambda station: geopy_distance((latitude, longitude), (station[1], station[2])).km,
+    )
+
+
+def _route_seconds(profile, origin_lat, origin_lon, dest_lat, dest_lon):
+    # Consulta o OSRM e retorna a duracao (segundos) da rota origem -> destino.
     # Retorna None se a rota nao for encontrada ou a requisicao falhar.
     host = OSRM_HOSTS[profile]
     # OSRM espera lon,lat (nao lat,lon) e a ordem origem;destino.
-    coordinates = f"{origin_lon},{origin_lat};{config.REFERENCE_LON},{config.REFERENCE_LAT}"
+    coordinates = f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
     url = f"{host}/route/v1/{profile}/{coordinates}?overview=false"
     try:
         with urllib.request.urlopen(url, timeout=30) as response:
@@ -43,14 +68,20 @@ def _route_seconds(profile, origin_lat, origin_lon):
 
 
 def route_times(latitude, longitude):
-    # Tempo a pe e de bike (segundos) ate a referencia, com pausa entre as consultas
-    # (boa cidadania com o OSRM publico). Retorna (walk_seconds, bike_seconds);
-    # cada um pode ser None se a rota nao for encontrada.
-    walk = _route_seconds("walking", latitude, longitude)
+    # Tempos (segundos) a partir do imovel, com pausa entre as consultas (boa cidadania
+    # com o OSRM publico). Retorna (walk_seconds, bike_seconds, station_seconds, station_name):
+    #   - walk/bike: a pe e de bike ate a referencia (shopping)
+    #   - station:   a pe ate a estacao de metro/trem mais proxima (linha reta escolhe qual)
+    # Qualquer tempo pode ser None se a rota nao for encontrada.
+    reference = (config.REFERENCE_LAT, config.REFERENCE_LON)
+    walk = _route_seconds("walking", latitude, longitude, *reference)
     time.sleep(REQUEST_PAUSE_SECONDS)
-    bike = _route_seconds("cycling", latitude, longitude)
+    bike = _route_seconds("cycling", latitude, longitude, *reference)
     time.sleep(REQUEST_PAUSE_SECONDS)
-    return walk, bike
+    station_name, station_lat, station_lon = nearest_station(latitude, longitude)
+    station = _route_seconds("walking", latitude, longitude, station_lat, station_lon)
+    time.sleep(REQUEST_PAUSE_SECONDS)
+    return walk, bike, station, station_name
 
 
 def _properties_to_process(connection):
@@ -71,9 +102,10 @@ def _properties_to_process(connection):
 
 def _existing_times(connection, property_id):
     row = connection.execute(
-        "SELECT walk_seconds, bike_seconds FROM imoveis WHERE id = ?", (property_id,)
+        "SELECT walk_seconds, bike_seconds, estacao_segundos FROM imoveis WHERE id = ?",
+        (property_id,),
     ).fetchone()
-    return (row["walk_seconds"], row["bike_seconds"])
+    return (row["walk_seconds"], row["bike_seconds"], row["estacao_segundos"])
 
 
 def main():
@@ -83,29 +115,31 @@ def main():
     print(f"{len(properties)} imovel(is) com nota para processar (maior score primeiro).")
 
     # Agrupa por localizacao arredondada: mesma coordenada = uma consulta so.
-    cache = {}  # (lat, lon) -> (walk_seconds, bike_seconds)
+    cache = {}  # (lat, lon) -> (walk_seconds, bike_seconds, station_seconds, station_name)
     api_calls = 0
 
     for property in properties:
-        walk, bike = _existing_times(connection, property["id"])
-        if walk is not None and bike is not None:
-            continue  # ja calculado: nao regasta a API
+        walk, bike, station = _existing_times(connection, property["id"])
+        if walk is not None and bike is not None and station is not None:
+            continue  # ja calculado (inclusive estacao): nao regasta a API
 
         location = (round(property["latitude"], 6), round(property["longitude"], 6))
         if location not in cache:
             print(f"  score {property['score']:5} | {property['address'] or property['id']}")
-            walk_seconds, bike_seconds = route_times(*location)
-            api_calls += 2
-            cache[location] = (walk_seconds, bike_seconds)
+            walk_seconds, bike_seconds, station_seconds, station_name = route_times(*location)
+            api_calls += 3  # a pe, bike e ate a estacao
+            cache[location] = (walk_seconds, bike_seconds, station_seconds, station_name)
             if walk_seconds is not None:
-                print(f"      a pe {walk_seconds // 60} min | bike {(bike_seconds or 0) // 60} min")
+                print(f"      a pe {walk_seconds // 60} min | bike {(bike_seconds or 0) // 60} min "
+                      f"| estacao {(station_seconds or 0) // 60} min ({station_name})")
         else:
-            walk_seconds, bike_seconds = cache[location]
+            walk_seconds, bike_seconds, station_seconds, station_name = cache[location]
             print(f"  score {property['score']:5} | mesma localizacao -> reaproveita (sem nova consulta)")
 
         connection.execute(
-            "UPDATE imoveis SET walk_seconds = ?, bike_seconds = ? WHERE id = ?",
-            (walk_seconds, bike_seconds, property["id"]),
+            "UPDATE imoveis SET walk_seconds = ?, bike_seconds = ?, "
+            "estacao_segundos = ?, estacao_nome = ? WHERE id = ?",
+            (walk_seconds, bike_seconds, station_seconds, station_name, property["id"]),
         )
         connection.commit()  # grava a cada imovel: se falhar no meio, nao perde o feito
 

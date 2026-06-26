@@ -118,12 +118,20 @@ function popup(property, position) {
   const present = AMENITIES
     .filter(function (amenity) { return property[amenity.key] === 1; })
     .map(function (amenity) { return amenity.icon + ' ' + amenity.label.toLowerCase(); });
-  const amenityLine = present.length ? present.join(' · ') + '<br>' : '';
-  return '<b>#' + position + ' — score ' + property.score + '</b><br>' +
-         total + ' (' + property.price_per_m2 + '/m²)<br>' +
-         property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m², ' + property.parking + ' vaga(s)' + furnished + '<br>' +
-         property.distance_km + ' km do shopping' + floor + '<br>' +
-         amenityLine +
+  // Cada info vira um item da lista (<li>). Os opcionais (estacao, amenidades) so
+  // entram quando ha dado, para a lista nao ficar com itens vazios.
+  const items = [
+    total + ' (' + property.price_per_m2 + '/m²)',
+    property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m², ' + property.parking + ' vaga(s)' + furnished,
+    property.distance_km + ' km do shopping' + floor,
+  ];
+  if (property.station_min != null) {
+    items.push('🚇 ' + property.station_min + '′ até ' + (property.station_name || 'a estação'));
+  }
+  if (present.length) items.push(present.join(' · '));
+  const list = items.map(function (item) { return '<li>' + item + '</li>'; }).join('');
+  return '<b>#' + position + ' — score ' + property.score + '</b>' +
+         '<ul class="popup-info">' + list + '</ul>' +
          '<a href="' + esc(property.url) + '" target="_blank">ver anúncio ↗</a>';
 }
 
@@ -154,6 +162,20 @@ function commuteCell(walkMin, bikeMin) {
     td.title = 'A pé ' + walkMin + ' min · de bike ' + (bikeMin != null ? bikeMin + ' min' : '?');
   }
   td.dataset.value = walkMin != null ? walkMin : Infinity;
+  return td;
+}
+
+// Celula da estacao mais proxima: mostra so o tempo a pe ("8′"); o nome da estacao
+// aparece no tooltip (title) ao passar o mouse. Vazia quando ainda nao calculado
+// (commute.py nao rodou). Ordena pelo tempo a pe; nao calculados (Infinity) vao pro fim.
+function stationCell(stationMin, stationName) {
+  const td = document.createElement('td');
+  td.className = 'extras';
+  if (stationMin != null) {
+    td.textContent = stationMin + '′';
+    td.title = 'A pé ' + stationMin + ' min até ' + (stationName || 'a estação mais próxima');
+  }
+  td.dataset.value = stationMin != null ? stationMin : Infinity;
   return td;
 }
 
@@ -322,6 +344,7 @@ function render() {
     tr.appendChild(cell(totalText, property.total_price != null ? property.total_price : 0));
     tr.appendChild(cell(property.distance_km + ' km', property.distance_km));
     tr.appendChild(commuteCell(property.walk_min, property.bike_min));
+    tr.appendChild(stationCell(property.station_min, property.station_name));
     tr.appendChild(cell(property.bedrooms, property.bedrooms));
     tr.appendChild(cell(property.area_m2 + ' m²', property.area_m2));
     // Extras em colunas separadas (sem titulo no cabecalho), so o icone quando positivo

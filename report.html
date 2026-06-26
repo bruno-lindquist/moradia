@@ -20,14 +20,14 @@
 <body>
   <!-- Filtros client-side: estreitam a lista e os pins sem recarregar a pagina -->
   <div class="filters">
-    <label><input type="checkbox" id="f-parking"> Só com vaga</label>
-    <label><input type="checkbox" id="f-furnished"> Só mobiliado</label>
+    <label><input type="checkbox" id="f-parking">Com vaga</label>
+    <label><input type="checkbox" id="f-furnished">Só mobiliado</label>
     <label><input type="checkbox" id="f-rated"> Só com nota</label>
     <label><input type="checkbox" id="f-hide-seen"> Esconder vistos</label>
-    <label><input type="checkbox" id="f-near-cheap"> 📍 Perto + barato</label>
-    <label>Distância até<input type="number" id="f-max-distance" min="0" step="0.5" placeholder="km"> km</label>
-    <label>Total até R$<input type="number" id="f-max-total" min="0" step="100" placeholder="valor"></label>
-    <label>Endereço<input type="text" id="f-address" placeholder="rua, avenida..."></label>
+    <label><input type="checkbox" id="f-near-cheap">Perto + barato</label>
+    <label>Distância<input type="number" id="f-max-distance" min="0" step="0.5" placeholder="km"> km</label>
+    <label>Total R$<input type="number" id="f-max-total" min="0" step="100" placeholder="valor"></label>
+    <label>End.<input type="text" id="f-address" placeholder="rua, avenida..."></label>
     <button type="button" id="f-hidden-toggle">Só ocultos</button>
     &nbsp;&nbsp;
     <span class="count" id="summary"></span>
@@ -42,6 +42,7 @@
       <tr>
         <th></th><th>#</th><th>Score</th><th>Total</th><th>Dist.</th>
         <th title="Tempo a pé · de bike até o shopping">🚶🚴</th>
+        <th title="Tempo a pé até a estação de metrô/trem mais próxima">🚇</th>
         <th>Qt.</th><th>Área</th><th></th><th></th><th></th>
         {% for amenity in amenities %}<th title="{{ amenity.label }}">{{ amenity.icon }}</th>{% endfor %}
         <th></th><th style="width: 300px;">Endereço</th><th>Cód.</th><th></th>

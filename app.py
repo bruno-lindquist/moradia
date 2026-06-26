@@ -71,6 +71,9 @@ def _rental_dict(connection, property):
         # tempo ate o shopping em minutos (None = ainda nao calculado por commute.py)
         "walk_min": _to_minutes(property.get("walk_seconds")),
         "bike_min": _to_minutes(property.get("bike_seconds")),
+        # tempo a pe ate a estacao de metro/trem mais proxima, e o nome dela
+        "station_min": _to_minutes(property.get("station_seconds")),
+        "station_name": property.get("station_name"),
         "change": ranking.price_change(connection, property["id"]),
     }
     amenities.copy_keys(property, rental)

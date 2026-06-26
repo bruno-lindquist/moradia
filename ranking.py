@@ -77,7 +77,7 @@ def load_properties(connection, operation, include_inactive=False):
         f"""
         SELECT id, titulo, endereco, area_m2, quartos, vagas, distancia_km, url,
                latitude, longitude, nota, mobiliado, andar, aceita_pet, ativo,
-               walk_seconds, bike_seconds, {amenity_columns}
+               walk_seconds, bike_seconds, estacao_segundos, estacao_nome, {amenity_columns}
         FROM imoveis
         WHERE operacao = ?
           {active_filter}
@@ -114,6 +114,8 @@ def load_properties(connection, operation, include_inactive=False):
             "active": row["ativo"],
             "walk_seconds": row["walk_seconds"],
             "bike_seconds": row["bike_seconds"],
+            "station_seconds": row["estacao_segundos"],
+            "station_name": row["estacao_nome"],
             "price": value,
             "total_price": total_value,
             # cost = valor TOTAL cheio (aluguel + condominio + IPTU). E o que baseia

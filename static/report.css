@@ -35,8 +35,8 @@ h1 { font-size: 22px; }
 #map { height: 400px; border-radius: 8px; }
 table { border-collapse: collapse; width: 100%; font-size: 14px; }
 th, td { padding: 5px 8px; border-bottom: 1px solid #1f232c; text-align: left; }
-/* Total (4a col), Dist. (5a), Tempo (6a) e Área (8a) nao quebram o texto */
-td:nth-child(4), td:nth-child(5), td:nth-child(6), td:nth-child(8) { white-space: nowrap; }
+/* Total (4a col), Dist. (5a), Tempo shopping (6a), Estação (7a) e Área (9a) nao quebram o texto */
+td:nth-child(4), td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(9) { white-space: nowrap; }
 /* Ao rolar ate uma linha (clique no pin), reserva o espaco do mapa + cabecalho
    fixos no topo, senao a linha para escondida atras deles. ~412 (mapa) + 44 (thead) */
 tbody tr { scroll-margin-top: 460px; }
@@ -96,6 +96,9 @@ td.amenity:hover { background: #242a36; }
 /* flash da linha quando se clica no pin no mapa (chama atencao por ~1.5s) */
 @keyframes flash-row { from { background: #1f4d6b; } to { background: transparent; } }
 tr.flash td { animation: flash-row 1.5s ease-out; }
+/* Lista de infos do balao do mapa: compacta, sem o recuo/bullet padrao do navegador */
+.popup-info { margin: 4px 0; padding-left: 18px; }
+.popup-info li { margin: 2px 0; }
 /* Toast: aviso curto no canto inferior que aparece e some sozinho */
 #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
          background: #191d25; color: #e9edf2; padding: 10px 18px; border-radius: 6px;
