@@ -55,12 +55,35 @@ para buscar os imóveis.
 
 ---
 
-## Como usar
+## O jeito mais fácil de usar (atalho clicável)
 
-Sempre que for usar o programa, primeiro **ative o ambiente** (o mesmo comando de ativação
-da instalação): `.venv\Scripts\activate` no Windows ou `source .venv/bin/activate` no Mac.
+Depois de instalar (acima), você não precisa mais abrir o terminal nem digitar comandos.
+Há um atalho que faz tudo por você — é só dar **duplo-clique**:
 
-São só dois passos no dia a dia:
+- **Mac**: `iniciar.command` (no Finder)
+- **Windows**: `iniciar.bat` (no Explorer)
+
+Ele pergunta o que você quer fazer:
+
+- **A) Buscar imóveis** — atualiza os preços na internet e depois abre o relatório.
+- **B) Ver o relatório** — abre direto, com os dados que já tem.
+
+Em seguida o navegador abre sozinho com o relatório. Para parar, volte à janela preta
+(terminal) que ficou aberta e aperte **Ctrl + C** (ou simplesmente feche a janela).
+
+> Na primeira vez no Mac, pode ser que o `iniciar.command` não abra com duplo-clique por
+> segurança do sistema. Clique nele com o **botão direito → Abrir** uma vez; depois passa
+> a funcionar normalmente.
+
+---
+
+## Usando pelos comandos (alternativa ao atalho)
+
+Se preferir rodar pelo terminal, primeiro **ative o ambiente** (o mesmo comando de
+ativação da instalação): `.venv\Scripts\activate` no Windows ou
+`source .venv/bin/activate` no Mac.
+
+No dia a dia, são dois passos:
 
 **1. Buscar os imóveis** (atualiza os preços):
 
@@ -85,28 +108,43 @@ Depois abra o navegador e acesse: **http://localhost:8765**
 
 Para parar o relatório, volte ao terminal e aperte **Ctrl + C**.
 
-> Existe ainda um comando extra, opcional: `python ranking.py` mostra o ranking direto no
-> terminal (sem mapa). Para o uso normal, **`python app.py` é o principal**.
+### Comandos extras (opcionais)
+
+- `python commute.py` — calcula, para os imóveis **com nota**, o tempo **a pé** e **de
+  bicicleta** até o shopping e o tempo **a pé até a estação** de metrô/trem mais próxima.
+  Esses tempos aparecem no relatório (colunas 🚶🚴 e 🚇).
+- `python fix_coords.py` — reabre a página de cada imóvel **com nota** para: corrigir a
+  localização exata no mapa, registrar o preço atual e **detectar anúncios que saíram do
+  ar** (some do relatório). Útil rodar de vez em quando para manter os dados precisos.
+- `python ranking.py` — mostra o ranking direto no terminal (sem mapa).
+
+> Para o uso normal, **o atalho clicável (ou `python app.py`) é o principal**. Os comandos
+> acima são refinamentos opcionais.
 
 ---
 
 ## Como funciona o score (a nota de custo-benefício)
 
-Cada imóvel ganha uma **nota de 0 a 100** — quanto **maior, melhor**. O programa calcula
-essa nota juntando 7 características, cada uma com um peso:
+Cada imóvel ganha uma **nota em pontos** — quanto **maior, melhor**. O programa soma os
+pontos de várias características. As faixas são **fixas** (não dependem dos outros imóveis),
+então a nota de um apartamento não muda quando outro entra ou sai da lista.
 
-| Peso | Característica | O que pontua mais |
-|-----:|----------------|-------------------|
-| **34%** | Preço total (aluguel + condomínio + IPTU) | mais barato |
-| **25%** | Distância até o shopping | mais perto |
-| **15%** | Sua nota de estrelas | mais estrelas |
-| **9%** | É mobiliado? | se for mobiliado |
-| **9%** | Tem vaga de garagem? | se tiver vaga |
-| **4%** | Fica no 4º andar ou acima? | se for andar alto |
-| **4%** | NÃO aceita pet? | se não aceitar pet |
+| Pontos | Característica | O que pontua mais |
+|-------:|----------------|-------------------|
+| **35** | Preço total (aluguel + condomínio + IPTU) | mais barato (R$ 1.800 = cheio; R$ 3.200 = zero) |
+| **35** | Distância até o shopping | mais perto (0,3 km = cheio; 3 km = zero) |
+| **10** | É mobiliado? | se for mobiliado |
+| **6**  | Tem vaga de garagem? | se tiver 1+ vaga |
+| **5**  | Sua nota de estrelas | proporcional a quantas estrelas (1 a 5) |
+| **3**  | Fica no 4º andar ou acima? | se for andar alto |
+| **+**  | Amenidades marcadas à mão | cada amenidade soma seus pontos (piscina, academia, etc.) |
 
-> Os pesos podem ser alterados no arquivo `ranking.py`, caso você queira valorizar mais
-> o preço, a distância, etc.
+Imóveis **fora da faixa** de preço (acima de R$ 3.200) ou de distância (acima de 3 km) são
+**eliminados** do ranking. O campo "aceita pet" é apenas **exibido** — não entra no score.
+
+> Os pesos e as faixas ficam no arquivo `ranking.py` (variáveis `POINTS_*`, `PRICE_MIN`,
+> `PRICE_MAX`, `DISTANCE_MIN`, `DISTANCE_MAX`). Os pontos de cada amenidade ficam na tabela
+> `amenidades` do banco.
 
 ---
 
@@ -116,8 +154,8 @@ No relatório, a **primeira coluna** de cada imóvel tem 5 estrelas. Você usa p
 sua opinião pessoal sobre cada apartamento:
 
 - **Clique numa estrela** → dá sua nota de **1 a 5**. Clicar de novo na mesma estrela
-  **apaga** a nota. Sua nota entra no cálculo do score (vale 15%). Imóveis com nota **4 ou
-  5** ficam **destacados** (linha amarela e pin dourado no mapa).
+  **apaga** a nota. Sua nota entra no cálculo do score (vale 5 pontos). Imóveis com nota
+  **4 ou 5** ficam **destacados** (linha amarela e pin dourado no mapa).
 
 - **Clique com o botão direito** numa estrela → marca um **traço (–)**. Serve para dizer
   "já olhei este, mas não me interessou a ponto de dar estrela". É **apenas uma marcação**
@@ -131,17 +169,41 @@ sua opinião pessoal sobre cada apartamento:
 
 ---
 
+## O relatório por dentro (mapa, filtros e amenidades)
+
+- **Mapa** — cada imóvel é um pin colorido pela sua nota de custo-benefício (verde = bom,
+  âmbar = médio, vermelho = ruim). Pins próximos se agrupam num círculo com a contagem; o
+  pin do shopping marca o ponto de referência.
+
+- **Filtros** (no topo, sem recarregar a página) — estreitam a lista e os pins: com vaga,
+  só mobiliado, só com nota, esconder vistos, distância máxima, valor total máximo, busca
+  por endereço e um botão "Só ocultos" (para rever e restaurar anúncios escondidos).
+
+- **Amenidades** — colunas de ícone (🅿️ vaga, 🛋️ mobiliado, ↑ andar 4º+, piscina,
+  academia, etc.). Você pode marcar à mão se um imóvel **tem** ou **não tem** cada
+  amenidade; as marcadas como "tem" somam pontos no score. Marcar "mobiliado" à mão
+  **protege** esse valor de ser sobrescrito na próxima busca.
+
+- **Tempos de deslocamento** — colunas 🚶🚴 (a pé e de bike até o shopping) e 🚇 (a pé até
+  a estação mais próxima). Só aparecem depois de rodar `python commute.py`.
+
+- **Reordenar** — clique no cabeçalho de qualquer coluna para ordenar por ela.
+
+---
+
 ## Como ajustar a busca
 
 Quase tudo o que dá para mudar fica no arquivo **`config.py`** (abra com qualquer editor
 de texto):
 
-- **Faixa de preço e tamanho**: `FILTROS_ALUGUEL` (vai na busca do site) e os limites
-  `PRECO_MIN` / `PRECO_MAX` / `AREA_MIN` / `AREA_MAX`. *Mantenha os dois em sintonia —
-  se mudar o preço no filtro, ajuste também os limites.*
-- **Distância máxima** mostrada no relatório: `DISTANCIA_MAX_KM`.
-- **Outra região / outro ponto de referência**: troque `SHOPPING_NOME`, `SHOPPING_LAT` e
-  `SHOPPING_LON` (as coordenadas do lugar de referência).
+- **Faixa de preço e tamanho**: a string `RENT_FILTERS` (vai na busca do site) e os limites
+  `PRICE_MIN` / `PRICE_MAX` / `AREA_MIN` / `AREA_MAX`. *Mantenha os dois em sintonia — se
+  mudar o preço no filtro, ajuste também os limites.*
+- **Outra região / outro ponto de referência**: troque `REFERENCE_NAME`, `REFERENCE_LAT` e
+  `REFERENCE_LON` (as coordenadas do lugar de referência).
+
+A **distância máxima** que entra no ranking fica em **`ranking.py`** (`DISTANCE_MAX`),
+junto com os pesos do score.
 
 Os **bairros** pesquisados ficam guardados no banco de dados (não no `config.py`), e cada
 um pode ser ligado ou desligado.
@@ -150,11 +212,17 @@ um pode ser ligado ou desligado.
 
 ## O que tem em cada arquivo
 
-- `config.py` — as configurações (faixa de preço, distância, ponto de referência)
+- `config.py` — as configurações (faixa de preço, ponto de referência, filtros da busca)
 - `collect.py` — comando que faz a busca dos imóveis na internet
-- `app.py` — comando que abre o relatório interativo no navegador
-- `report.html` — a página do relatório (mapa + tabela); usada pelo `app.py`
+- `app.py` — comando que abre o relatório interativo no navegador (servidor Flask)
+- `commute.py` — comando que calcula os tempos a pé/bike até o shopping e a pé até a estação
+- `fix_coords.py` — comando que corrige coordenadas e detecta anúncios fora do ar
 - `ranking.py` — mostra o ranking no terminal (e contém o cálculo do score)
+- `report.html` — a página do relatório (estrutura HTML); usada pelo `app.py`
+- `static/report.css` — a aparência do relatório
+- `static/report.js` — o que torna o relatório interativo (mapa, filtros, estrelas)
 - `scraper.py` — a parte que lê os anúncios do site QuintoAndar
 - `geo.py` — descobre as coordenadas dos endereços e calcula a distância
+- `amenities.py` — carrega a lista de amenidades (definida na tabela `amenidades` do banco)
 - `database.py` — cuida do banco de dados (o arquivo `moradia.db`)
+- `iniciar.command` / `iniciar.bat` — atalhos clicáveis (Mac / Windows)

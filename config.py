@@ -18,9 +18,9 @@ REFERENCE_LON = -46.6997
 # Necessario porque o QuintoAndar mistura imoveis "recomendados" fora do filtro
 # (search_results_flexible) quando a busca e restritiva. Mantenha em sincronia com RENT_FILTERS.
 PRICE_MIN = 500
-PRICE_MAX = 3200
+PRICE_MAX = 3400
 AREA_MIN = 10
-AREA_MAX = 40
+AREA_MAX = 50
 
 
 # Para mudar os filtros, ajuste esta string. Para nao filtrar, deixe "".

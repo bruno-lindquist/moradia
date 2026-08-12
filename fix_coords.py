@@ -66,18 +66,21 @@ def fix_one(connection, page, property):
         return "inalterado"
 
     distance_km = geo.distance_to_reference(latitude, longitude)
-    walk_seconds, bike_seconds = commute.route_times(latitude, longitude)
+    walk_seconds, bike_seconds, station_seconds, station_name = commute.route_times(latitude, longitude)
     connection.execute(
         """
         UPDATE imoveis
-        SET latitude = ?, longitude = ?, distancia_km = ?, walk_seconds = ?, bike_seconds = ?
+        SET latitude = ?, longitude = ?, distancia_km = ?, walk_seconds = ?, bike_seconds = ?,
+            estacao_segundos = ?, estacao_nome = ?
         WHERE id = ?
         """,
-        (latitude, longitude, distance_km, walk_seconds, bike_seconds, property["id"]),
+        (latitude, longitude, distance_km, walk_seconds, bike_seconds,
+         station_seconds, station_name, property["id"]),
     )
     connection.commit()  # grava a cada imovel: se falhar no meio, nao perde o feito
     print(f"      coord {old['latitude']:.5f},{old['longitude']:.5f} -> {latitude:.5f},{longitude:.5f}"
-          f" | {distance_km} km | a pe {(walk_seconds or 0)//60} min | bike {(bike_seconds or 0)//60} min")
+          f" | {distance_km} km | a pe {(walk_seconds or 0)//60} min | bike {(bike_seconds or 0)//60} min"
+          f" | estacao {(station_seconds or 0)//60} min ({station_name})")
     return "ok"
 
 

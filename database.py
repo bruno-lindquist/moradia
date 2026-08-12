@@ -112,9 +112,13 @@ def save_property(connection, property, now):
             -- detalhado so "sobe" para 1; uma vez detalhado, continua detalhado
             detalhado = MAX(excluded.detalhado, imoveis.detalhado),
             url = excluded.url,
-            latitude = excluded.latitude,
-            longitude = excluded.longitude,
-            distancia_km = excluded.distancia_km
+            -- Coordenada: so preenche se o imovel AINDA nao tem. A re-coleta passa a
+            -- coordenada geocodificada pelo nome da rua (imprecisa, erro de ate ~1,5 km);
+            -- se sobrescrevesse, destruiria a coordenada exata do QuintoAndar gravada
+            -- por fix_coords.py. Uma vez que o imovel tem coordenada, so fix_coords a atualiza.
+            latitude = CASE WHEN imoveis.latitude IS NULL THEN excluded.latitude ELSE imoveis.latitude END,
+            longitude = CASE WHEN imoveis.longitude IS NULL THEN excluded.longitude ELSE imoveis.longitude END,
+            distancia_km = CASE WHEN imoveis.latitude IS NULL THEN excluded.distancia_km ELSE imoveis.distancia_km END
         """,
         {
             "id": property["id"],

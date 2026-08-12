@@ -1,9 +1,20 @@
+# Ambiente Python
 .venv/
 __pycache__/
-*.db.backup
-*.db.backup-*
+
+# Backups do banco (o banco em si, moradia.db, é versionado de propósito)
+*.db.backup*
+*.db.bak*
+
+# Segredos: nunca commitar
+.env
+
+# Ferramentas e sistema operacional
 .claude/
 .playwright-mcp/
+.DS_Store
+
+# Arquivos de trabalho locais
 mapa-*.png
 *.xlsx
 ~$*

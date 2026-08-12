@@ -1,107 +1,361 @@
 /* Tema escuro "Slate quase preto": fundos quase pretos com leve tom azulado;
-   o azul (#4a9eff) fica reservado para acentos (links, foco, linha clicada). */
-body { font-family: -apple-system, Arial, sans-serif; margin: 24px;
-       color: #e9edf2; background: #0c0e12; }
-h1 { font-size: 22px; }
-.controls { margin: 16px 0; }
-/* Barra de filtros: checkboxes em linha para estreitar a lista */
-.filters { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
-           font-size: 14px; color: #9aa3b2; }
-.filters label { cursor: pointer; user-select: none; }
-.filters input[type="checkbox"] { cursor: pointer; vertical-align: middle; margin-right: 4px;
-                 accent-color: #4a9eff; }
+   o azul (--accent) fica reservado para acentos (links, foco, linha clicada).
+   TODAS as cores ficam no :root abaixo; nenhuma cor hex solta no resto do arquivo.
+   Para mudar o tema, edite so os valores aqui. */
+:root {
+  /* superficies (do fundo da pagina ao realce de hover) */
+  --bg: #0c0e12;
+  --surface: #191d25;
+  --surface-hover: #0a1656;
+  --surface-hover-strong: #232936; /* hover do cabecalho da tabela */
+  --border: #2a2f3a;               /* borda de inputs/botoes */
+  --border-row: #1f232c;           /* linha divisoria da tabela */
+
+  /* textos, do mais forte ao mais apagado */
+  --text: #e9edf2;
+  --text-head: #aab3c2;            /* cabecalho da tabela */
+  --text-muted: #9aa3b2;           /* filtros */
+  --text-dim: #6b7280;             /* footer, "estavel/novo" */
+  --text-faint: #4a515f;           /* estrela/icone apagado */
+
+  /* acento (azul) e seu fundo */
+  --accent: #ffffff;               /* links, foco, linha clicada */
+  --accent-bg: #081e9d;            /* fundo azulado: toggle ativo, linha clicada */
+  --flash: #1f4d6b;                /* cor inicial do flash ao clicar no pin */
+
+  /* verde (positivo) e seu fundo */
+  --good: #3fc97e;                 /* preco caiu, restaurar, amenidade "tem" */
+  --good-bg: #14241b;              /* hover do botao restaurar */
+
+  /* vermelho (negativo) e seu fundo */
+  --bad: #e0625a;                  /* preco subiu, desativar */
+  --bad-bg: #2e1c1a;               /* hover do botao desativar */
+
+  /* dourado (nota) e suas variacoes */
+  --star: #ffcf4d;                 /* estrela cheia, nota alta */
+  --star-hover: #ffe08a;           /* estrela ao passar o mouse */
+  --star-bg: none;              /* fundo da linha de nota alta (ambar escuro) */
+}
+
+/* === Base === */
+body {
+  font-family: -apple-system, Arial, sans-serif;
+  margin: 24px;
+  color: var(--text);
+  background: var(--bg);
+}
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+/* === Filtros === */
+/* Barra de filtros: checkboxes e campos em linha para estreitar a lista */
+.filters {
+  margin: 12px 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.filters label {
+  cursor: pointer;
+  user-select: none;
+}
+.filters input[type="checkbox"] {
+  cursor: pointer;
+  vertical-align: middle;
+  margin-right: 4px;
+  accent-color: var(--accent);
+}
 /* Campos numericos de "maximo" (distancia/total): caixa escura combinando com o tema */
-.filters input[type="number"] { width: 70px; margin-left: 4px; padding: 3px 6px;
-                 background: #191d25; color: #e9edf2; border: 1px solid #2a2f3a;
-                 border-radius: 4px; font-size: 14px; }
+.filters input[type="number"] {
+  width: 70px;
+  margin-left: 4px;
+  padding: 3px 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+}
 /* Campo de texto para filtrar por endereco/rua: mesma caixa escura, um pouco mais larga */
-.filters input[type="text"] { width: 160px; padding: 3px 6px;
-                 background: #191d25; color: #e9edf2; border: 1px solid #2a2f3a;
-                 border-radius: 4px; font-size: 14px; }
+.filters input[type="text"] {
+  width: 160px;
+  padding: 3px 6px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+}
 /* Botao toggle "Só ocultos": cinza por padrao, vira azul (ativo) quando ligado */
-#f-hidden-toggle { cursor: pointer; padding: 4px 10px; font-size: 14px;
-                   background: #191d25; color: #9aa3b2; border: 1px solid #2a2f3a;
-                   border-radius: 4px; }
-#f-hidden-toggle.on { background: #14233a; color: #4a9eff; border-color: #4a9eff; }
-/* botao de restaurar (↩) nas linhas ocultas: verde, no lugar do ✕ */
-.restore { border: none; background: none; color: #3fc97e; cursor: pointer;
-           font-size: 15px; padding: 2px 6px; border-radius: 4px; }
-.restore:hover { background: #14241b; }
+#f-hidden-toggle {
+  cursor: pointer;
+  padding: 4px 10px;
+  font-size: 14px;
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+#f-hidden-toggle.on {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* === Mapa === */
 /* Wrapper sticky: prende o mapa no topo ao rolar a lista. Fica num container
    externo porque o Leaflet sobrescreve o position do #map interno.
    z-index 500 > 400 do cabecalho: o cabecalho passa POR BAIXO do mapa ao rolar. */
-.map-wrap { position: sticky; top: 0; z-index: 500; background: #0c0e12;
-            padding-bottom: 12px; margin-bottom: 12px; }
-#map { height: 400px; border-radius: 8px; }
-table { border-collapse: collapse; width: 100%; font-size: 14px; }
-th, td { padding: 5px 8px; border-bottom: 1px solid #1f232c; text-align: left; }
-/* Total (4a col), Dist. (5a), Tempo shopping (6a), Estação (7a) e Área (9a) nao quebram o texto */
-td:nth-child(4), td:nth-child(5), td:nth-child(6), td:nth-child(7), td:nth-child(9) { white-space: nowrap; }
-/* Ao rolar ate uma linha (clique no pin), reserva o espaco do mapa + cabecalho
-   fixos no topo, senao a linha para escondida atras deles. ~412 (mapa) + 44 (thead) */
-tbody tr { scroll-margin-top: 460px; }
-/* Cabecalho fixo logo ABAIXO do mapa (top = altura do mapa) ao rolar a lista */
-thead th { position: sticky; top: 400px; z-index: 400; }
-th { background: #191d25; cursor: pointer; user-select: none; white-space: nowrap;
-     color: #aab3c2; }
-th:hover { background: #232936; }
-/* Hover na linha: realce claro, com !important para vencer a linha amarela de nota alta */
-tbody tr:hover td { background: #242a36 !important; }
-a { color: #4a9eff; text-decoration: none; }
-a:hover { text-decoration: underline; }
-.down { color: #3fc97e; font-weight: bold; }
-.up { color: #e0625a; font-weight: bold; }
-.stable, .new { color: #6b7280; }
-.deactivate { border: none; background: none; color: #e0625a; cursor: pointer;
-              font-size: 15px; padding: 2px 6px; border-radius: 4px; }
-.deactivate:hover { background: #2e1c1a; }
-/* 5 estrelas de nota: cinza apagado por padrao, dourada quando preenchida */
-.stars { white-space: nowrap; }
-.star { color: #4a515f; cursor: pointer; font-size: 16px; line-height: 1; }
-.star.on { color: #ffcf4d; }
-.star:hover { color: #ffe08a; }
-/* "visto" (botao direito): um traco no lugar das estrelas, so para marcar
-   que o imovel ja foi olhado, sem dar nota. Nao entra no score. */
-.seen { color: #6b7280; cursor: pointer; font-size: 16px; line-height: 1; }
-.seen:hover { color: #aab3c2; }
-/* linha de imovel bem avaliado (nota alta): fundo ambar escuro */
-tr.high-rating td { background: #26210f; }
-/* ultima linha cujo link foi clicado: fundo azulado em toda a linha + faixa grossa
-   a esquerda (o link abre outra aba; isto marca de onde voce saiu, bem visivel ao voltar).
-   O fundo vence a linha amarela de nota alta (mesma especificidade, vem depois). */
-tr.last-clicked td { background: #14233a; }
-tr.last-clicked td:first-child { box-shadow: inset 5px 0 0 #4a9eff; }
-/* coluna "Extras": icones de mobilia/andar/pet/vaga, so quando positivo */
-.extras { white-space: nowrap; font-size: 14px; }
-.extras span { margin-right: 6px; }
-/* Amenidades manuais (piscina/academia/bike/sauna): celula inteira clicavel.
-   "tem" = icone normal (verde de fundo no hover); "nao tem" = icone apagado e riscado;
-   vazio = celula vazia mas ainda clicavel. */
-td.amenity { cursor: pointer; }
-td.amenity:hover { background: #242a36; }
-.amenity-on { color: #3fc97e; }
-.amenity-off { color: #4a515f; text-decoration: line-through; opacity: 0.6; }
-.count { font-size: 13px; font-weight: normal; color: #6b7280; }
-.footer { margin-top: 28px; font-size: 12px; color: #6b7280; }
-.pin-num { background: #191d25; color: #e9edf2; border: 2px solid #6b7280; border-radius: 50%;
-           width: 26px; height: 26px; line-height: 22px; text-align: center;
-           font-weight: bold; font-size: 12px; transition: transform 0.1s; }
-.pin-high-rating { border-width: 3px; box-shadow: 0 0 0 2px #ffcf4d; }
+.map-wrap {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  background: var(--bg);
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+}
+#map {
+  height: 400px;
+  border-radius: 8px;
+}
+/* Pin numerado no mapa (posicao no ranking) */
+.pin-num {
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--text-dim);
+  border-radius: 50%;
+  width: 26px;
+  height: 26px;
+  line-height: 22px;
+  text-align: center;
+  font-weight: bold;
+  font-size: 12px;
+  transition: transform 0.1s;
+}
+.pin-high-rating {
+  border-width: 3px;
+  box-shadow: 0 0 0 2px var(--star);
+}
 /* destaque ao passar o mouse na linha correspondente da tabela: cresce e ganha
    anel azul, para localizar o imovel no mapa. Vale para o pin individual (.pin-num)
    e para o cluster que o contem (.pin-hover aplicado no div do markercluster). */
-.pin-hover { transform: scale(1.4); box-shadow: 0 0 0 3px #4a9eff !important;
-             z-index: 1000 !important; }
-.pin-num.pin-hover { border-color: #4a9eff; }
-/* flash da linha quando se clica no pin no mapa (chama atencao por ~1.5s) */
-@keyframes flash-row { from { background: #1f4d6b; } to { background: transparent; } }
-tr.flash td { animation: flash-row 1.5s ease-out; }
+.pin-hover {
+  transform: scale(1.4);
+  box-shadow: 0 0 0 3px var(--accent) !important;
+  z-index: 1000 !important;
+}
+.pin-num.pin-hover {
+  border-color: var(--accent);
+}
 /* Lista de infos do balao do mapa: compacta, sem o recuo/bullet padrao do navegador */
-.popup-info { margin: 4px 0; padding-left: 18px; }
-.popup-info li { margin: 2px 0; }
+.popup-info {
+  margin: 4px 0;
+  padding-left: 18px;
+}
+.popup-info li {
+  margin: 2px 0;
+}
+
+/* === Tabela === */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 11px;
+}
+th, td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border-row);
+  text-align: left;
+}
+/* Total (4a col), Dist. (5a), Tempo shopping (6a), Estação (7a) e Área (9a) nao quebram o texto */
+td:nth-child(4),
+td:nth-child(5),
+td:nth-child(6),
+td:nth-child(7),
+td:nth-child(9) {
+  white-space: nowrap;
+}
+/* Ao rolar ate uma linha (clique no pin), reserva o espaco do mapa + cabecalho
+   fixos no topo, senao a linha para escondida atras deles. ~412 (mapa) + 44 (thead) */
+tbody tr {
+  scroll-margin-top: 460px;
+}
+/* Cabecalho fixo logo ABAIXO do mapa (top = altura do mapa) ao rolar a lista */
+thead th {
+  position: sticky;
+  top: 400px;
+  z-index: 400;
+}
+th {
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  color: var(--text-head);
+}
+th:hover {
+  background: var(--surface-hover-strong);
+}
+/* Hover na linha: realce claro, com !important para vencer a linha amarela de nota alta */
+tbody tr:hover td {
+  background: var(--surface-hover) !important;
+}
+
+/* === Linhas: destaques de estado === */
+/* linha de imovel bem avaliado (nota alta): fundo ambar escuro */
+tr.high-rating td {
+  background: var(--star-bg);
+}
+/* ultima linha cujo link foi clicado: fundo azulado em toda a linha + faixa grossa
+   a esquerda (o link abre outra aba; isto marca de onde voce saiu, bem visivel ao voltar).
+   O fundo vence a linha amarela de nota alta (mesma especificidade, vem depois). */
+tr.last-clicked td {
+  background: var(--accent-bg);
+}
+tr.last-clicked td:first-child {
+  box-shadow: inset 5px 0 0 var(--accent);
+}
+/* flash da linha quando se clica no pin no mapa (chama atencao por ~1.5s) */
+@keyframes flash-row {
+  from { background: var(--flash); }
+  to { background: transparent; }
+}
+tr.flash td {
+  animation: flash-row 1.5s ease-out;
+}
+
+/* === Variacao de preco === */
+.down {
+  color: var(--good);
+  font-weight: bold;
+}
+.up {
+  color: var(--bad);
+  font-weight: bold;
+}
+.stable, .new {
+  color: var(--text-dim);
+}
+
+/* === Estrelas e "visto" === */
+/* 5 estrelas de nota: cinza apagado por padrao, dourada quando preenchida */
+.stars {
+  white-space: nowrap;
+}
+.star {
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.star.on {
+  color: var(--star);
+}
+.star:hover {
+  color: var(--star-hover);
+}
+/* "visto" (botao direito): um traco no lugar das estrelas, so para marcar
+   que o imovel ja foi olhado, sem dar nota. Nao entra no score. */
+.seen {
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+.seen:hover {
+  color: var(--text-head);
+}
+
+/* === Extras e amenidades === */
+/* coluna "Extras": icones de mobilia/andar/pet/vaga, so quando positivo */
+.extras {
+  white-space: nowrap;
+  font-size: 14px;
+}
+.extras span {
+  margin-right: 6px;
+}
+/* Amenidades manuais (piscina/academia/bike/sauna): celula inteira clicavel.
+   "tem" = icone normal (verde de fundo no hover); "nao tem" = icone apagado e riscado;
+   vazio = celula vazia mas ainda clicavel. */
+td.amenity {
+  cursor: pointer;
+}
+td.amenity:hover {
+  background: var(--surface-hover);
+}
+.amenity-on {
+  color: var(--good);
+}
+.amenity-off {
+  color: var(--text-faint);
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+/* === Botoes de acao (desativar / restaurar) === */
+.deactivate {
+  border: none;
+  background: none;
+  color: var(--bad);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.deactivate:hover {
+  background: var(--bad-bg);
+}
+/* botao de restaurar (↩) nas linhas ocultas: verde, no lugar do ✕ */
+.restore {
+  border: none;
+  background: none;
+  color: var(--good);
+  cursor: pointer;
+  font-size: 15px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+.restore:hover {
+  background: var(--good-bg);
+}
+
+/* === Rodape e toast === */
+.count {
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--text-dim);
+}
+.footer {
+  margin-top: 28px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
 /* Toast: aviso curto no canto inferior que aparece e some sozinho */
-#toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
-         background: #191d25; color: #e9edf2; padding: 10px 18px; border-radius: 6px;
-         border: 1px solid #2a2f3a; font-size: 14px; opacity: 0; pointer-events: none;
-         transition: opacity 0.25s; z-index: 1000; }
-#toast.show { opacity: 1; }
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 18px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 14px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  z-index: 1000;
+}
+#toast.show {
+  opacity: 1;
+}
