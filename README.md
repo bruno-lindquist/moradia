@@ -23,6 +23,7 @@ imóveis.
 9. [Usando pelo terminal (alternativa ao atalho)](#9-usando-pelo-terminal-alternativa-ao-atalho)
 10. [O que tem em cada arquivo](#10-o-que-tem-em-cada-arquivo)
 11. [Cuidados](#11-cuidados)
+12. [**Cola: todos os comandos**](#12-cola-todos-os-comandos)
 
 ---
 
@@ -90,6 +91,11 @@ Depois ele pergunta o que você quer fazer:
 
 O navegador abre sozinho no relatório (`http://localhost:8765`). Para parar, volte à janela
 preta e aperte **Ctrl + C**, ou simplesmente feche a janela.
+
+> ⚠️ **Depois de cada busca (opção A), vale rodar `python commute.py`.** Esse comando
+> calcula o tempo a pé até o metrô, que sozinho vale 35 dos 139 pontos do ranking. Sem ele,
+> os imóveis recém-encontrados aparecem lá embaixo mesmo sendo bons. Como fazer:
+> [seção 12, a cola dos comandos](#12-cola-todos-os-comandos).
 
 > Clicar no atalho de novo com o relatório já aberto não estraga nada: ele percebe que já
 > está no ar e só traz a página de volta ao navegador.
@@ -263,28 +269,54 @@ Detalhes que valem saber:
 ## 7. Manutenção: comandos extras
 
 Estes comandos **não** têm atalho clicável: rodam pelo terminal, com o ambiente do projeto
-(veja a seção 9). Nenhum deles é obrigatório para o uso normal, mas o primeiro faz diferença
-grande no ranking.
+ativado (veja a seção 9). Nenhum é obrigatório para o uso normal, mas o primeiro faz
+diferença grande no ranking.
 
-**`python commute.py`**
+### Calcular o tempo até o metrô (o mais importante)
+
+```bash
+python commute.py
+```
+
 Calcula o tempo **a pé até a estação** de metrô/trem mais próxima de cada imóvel e grava no
 banco. **Vale muito rodar depois de cada busca**, porque esse tempo é 35 dos 139 pontos do
-score. Ele pula quem já tem o tempo calculado e agrupa imóveis no mesmo endereço numa
-consulta só, então é rápido a partir da segunda vez.
+score: sem ele, um imóvel ótimo aparece lá embaixo no ranking. Ele pula quem já tem o tempo
+calculado e agrupa imóveis no mesmo endereço numa consulta só, então é rápido a partir da
+segunda vez.
 
-**`python fix_coords.py`**
+### Corrigir a localização e checar seus favoritos
+
+```bash
+python fix_coords.py
+```
+
 Reabre a página de cada imóvel **que tem nota de estrelas**, do maior score para o menor, e:
 corrige a localização exata no mapa (o endereço do site não tem número, então a posição
 inicial é aproximada), registra o preço atual e **detecta anúncios que saíram do ar** (que
 passam a ficar ocultos). Bom rodar de vez em quando nos seus favoritos.
-Aceita um limite: `python fix_coords.py 1` processa só o primeiro colocado.
 
-**`python ranking.py`**
+Para testar antes, dá para limitar a quantidade. Este processa só o primeiro colocado:
+
+```bash
+python fix_coords.py 1
+```
+
+### Ver o ranking sem abrir o navegador
+
+```bash
+python ranking.py
+```
+
 Mostra o ranking direto no terminal, sem mapa, com a variação de preço de cada imóvel.
 
-**`python limpar_precos.py`**
-Script de manutenção rara: enxuga o histórico de preços, deixando só os pontos em que o
-preço de fato mudou. Faz um backup do banco antes de apagar qualquer coisa.
+### Enxugar o histórico de preços (raro)
+
+```bash
+python limpar_precos.py
+```
+
+Manutenção rara: deixa no histórico só os pontos em que o preço de fato mudou. Faz um
+backup do banco antes de apagar qualquer coisa.
 
 ---
 
@@ -402,3 +434,49 @@ Para parar o relatório, aperte **Ctrl + C** no terminal.
 - **A pasta `.venv`** é o ambiente criado na primeira execução. Se algo der muito errado na
   instalação, apagar essa pasta e clicar no atalho de novo refaz tudo do zero, sem tocar nos
   seus dados.
+
+---
+
+## 12. Cola: todos os comandos
+
+Para o uso normal você **não precisa de nenhum comando**: é só o duplo-clique no
+`iniciar.command` (Mac) ou `iniciar.cmd` (Windows). Esta lista é para quando precisar.
+
+### O básico
+
+| O que eu quero | Como faço |
+|---|---|
+| Abrir o programa | duplo-clique em **`iniciar.command`** (Mac) ou **`iniciar.cmd`** (Windows) |
+| Ver o relatório no navegador | **http://localhost:8765** |
+| Parar o programa | **Ctrl + C** na janela preta, ou fechar a janela |
+| Atualizar a página do relatório | **F5** |
+
+### Pelo terminal
+
+Antes de qualquer comando, entre na pasta do projeto e **ative o ambiente**:
+
+```bash
+# Mac
+cd caminho/da/pasta/moradia
+source .venv/bin/activate
+```
+
+```powershell
+# Windows (PowerShell)
+cd caminho\da\pasta\moradia
+.venv\Scripts\activate
+```
+
+Depois, o comando que você quiser:
+
+```bash
+python collect.py        # busca e atualiza os imóveis na internet
+python commute.py        # calcula o tempo a pé até a estação (rode depois do collect)
+python app.py            # abre o relatório em http://localhost:8765
+python ranking.py        # mostra o ranking no terminal, sem mapa
+python fix_coords.py     # corrige a localização e o preço dos imóveis com nota
+python limpar_precos.py  # enxuga o histórico de preços (raro)
+```
+
+Se for a primeira vez naquele computador e o ambiente ainda não existir, veja a
+[seção 9](#9-usando-pelo-terminal-alternativa-ao-atalho).

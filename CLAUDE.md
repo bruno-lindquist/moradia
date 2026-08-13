@@ -33,10 +33,21 @@ pontual, ou uso contínuo do dia a dia como coletar/atualizar dados).
 ## Score de custo-benefício (`ranking.py`) — cuidado ao mexer
 
 - Soma de pontos com **faixas fixas** (não relativas aos outros imóveis do momento — isso é proposital, permite comparar ranking de dias diferentes).
-- Pesos atuais: preço 35, distância 35, mobiliado 10, vaga 6, andar 4º+ 3, nota manual 5, + pontos de amenidades (fonte única `amenities.py`).
-- Preço mais baixo = pontuação melhor (inverso). Distância menor = pontuação melhor (inverso).
-- Imóveis ativos fora da faixa de preço/distância são **eliminados** do ranking; imóveis ocultos continuam sendo pontuados (a eliminação/filtro é feita por quem chama, não aqui).
-- `pet` e `bicicletário` são só exibidos na tabela, **não** entram no score.
+- Pesos atuais: preço 35 (`POINTS_PRICE`), tempo a pé até a estação de metrô/trem 35
+  (`POINTS_STATION`), mobiliado 10, nota manual 5, andar 4º+ 3, + 51 de amenidades
+  (fonte única `amenities.AMENITIES`, carregada da tabela `amenidades` do banco).
+  `MAX_SCORE` = 139, calculado no código; nunca escrever o total à mão.
+- Faixas: preço R$ 1.800 (cheio) a R$ 3.000 (zero); estação 5 min (cheio) a 25 min (zero).
+  Nos dois, menor = melhor (inverso).
+- Preço pontuado é o **valor total** (aluguel + condomínio + IPTU); sem total informado,
+  usa o aluguel como aproximação.
+- O tempo até a estação vem do `commute.py` (coluna `estacao_segundos`). Sem ele calculado,
+  o imóvel leva **zero** nesse critério, mas **não** é eliminado.
+- Imóveis ativos fora da faixa (preço ou tempo até a estação) são **eliminados** do ranking;
+  imóveis ocultos continuam sendo pontuados (a eliminação/filtro é feita por quem chama,
+  não aqui, ver `within_range`).
+- Não entram no score: `vaga` e `pet` (coletados, nem exibidos no relatório) e `bicicletário`
+  (exibido, `points = 0` na fonte única).
 - Antes de mudar um peso, pergunte — já mudou de opinião sobre a fórmula mais de uma vez nas sessões anteriores.
 
 ## Erros já cometidos aqui (evite repetir)
