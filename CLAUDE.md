@@ -17,7 +17,10 @@ pontual, ou uso contínuo do dia a dia como coletar/atualizar dados).
   - `python collect.py` — busca/atualiza imóveis (scraper QuintoAndar).
   - `python ranking.py` — recalcula score e mostra ranking no terminal.
   - `python app.py` — servidor Flask local (`localhost:8765`) com o relatório interativo (`report.html`, mapa + tabela, permite dar nota e desativar anúncio — precisa do Flask porque grava no banco).
-- Atalhos clicáveis: `iniciar.command` (Mac) / `iniciar.bat` (Windows).
+- Atalhos clicáveis: `iniciar.command` (Mac) / `iniciar.cmd` (Windows). Ambos só chamam
+  `start.py`, que é a fonte única: cria o `.venv`, instala as dependências na primeira vez
+  (marcador `.venv/setup-fingerprint.txt`), pergunta A/B e chama `collect.py` / `app.py`.
+  Mudança no fluxo dos atalhos vai em `start.py`, nunca duplicada nos dois lançadores.
 
 ## Regras deste projeto
 

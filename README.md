@@ -6,84 +6,77 @@ imóveis com melhor **custo-benefício**.
 
 ---
 
-## Antes de começar
+## Como usar (é só dar duplo-clique)
 
-Você precisa ter o **Python** instalado no computador (versão 3.10 ou mais nova).
+Não é preciso digitar comandos nem instalar nada à mão. São dois passos.
+
+**1. Tenha o Python no computador** (versão 3.10 ou mais nova; a 3.14 ainda não serve).
 
 - Baixe em: https://www.python.org/downloads/
 - **No Windows**, durante a instalação, marque a caixinha **"Add Python to PATH"**.
 
-Para checar se já tem o Python, abra o terminal e digite:
+**2. Dê duplo-clique no atalho**, dentro da pasta do projeto:
 
-- **Windows** (abra o "PowerShell"): `python --version`
-- **Mac** (abra o "Terminal"): `python3 --version`
+- **Mac**: `iniciar.command` (no Finder)
+- **Windows**: `iniciar.cmd` (no Explorer)
 
-Se aparecer um número de versão (ex.: `Python 3.13.1`), está instalado.
+Na **primeira vez**, o atalho prepara tudo sozinho: cria o ambiente isolado do projeto,
+instala as bibliotecas e baixa o navegador usado na busca. Isso leva alguns minutos e
+baixa cerca de 150 MB, então **não feche a janela** enquanto estiver acontecendo. Nas
+vezes seguintes ele abre em segundos, porque só repete a instalação se a lista de
+bibliotecas mudar.
+
+Em seguida ele pergunta o que você quer fazer:
+
+- **A) Buscar imóveis**: atualiza os preços na internet e depois abre o relatório.
+- **B) Ver o relatório**: abre direto, com os dados que já tem.
+
+O navegador abre sozinho com o relatório. Para parar, volte à janela preta (terminal) que
+ficou aberta e aperte **Ctrl + C** (ou simplesmente feche a janela).
+
+> Clicar no atalho de novo com o relatório já aberto não estraga nada: ele percebe que já
+> está no ar e só traz a página de volta ao navegador.
+
+### Se o atalho não abrir
+
+- **Mac, na primeira vez**: por segurança, o sistema pode barrar o duplo-clique. Clique no
+  arquivo com o **botão direito → Abrir** uma vez; depois passa a funcionar normalmente.
+- **Mac, se ele abrir num editor de texto**: acontece quando o projeto chegou dentro de um
+  `.zip`, que apaga a permissão de execução do arquivo. Abra o Terminal na pasta do projeto
+  e rode uma vez: `chmod +x iniciar.command`.
+- **"Python não encontrado"**: instale pelo link do passo 1 e clique no atalho de novo.
+  No Windows, o mais comum é ter esquecido a caixinha "Add Python to PATH".
 
 ---
 
-## Como baixar e instalar
+## Usando pelos comandos (alternativa ao atalho)
 
-Abra o terminal **dentro da pasta do projeto** e rode os comandos abaixo, na ordem.
-Você só precisa fazer isso **uma vez**.
+### Instalação manual (só se você não quiser usar o atalho)
 
-### Windows (PowerShell)
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-python -m playwright install chromium
-```
-
-### Mac (Terminal)
+O atalho já faz isso sozinho. Os comandos equivalentes, rodados **uma vez** dentro da
+pasta do projeto, são:
 
 ```bash
+# Mac (Terminal). No Windows (PowerShell), troque "python3" por "python"
+# e "source .venv/bin/activate" por ".venv\Scripts\activate"
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 python -m playwright install chromium
 ```
 
-O que esses comandos fazem, em resumo: criam um "ambiente isolado" só para este projeto
-(`.venv`), instalam as bibliotecas necessárias e baixam o navegador que o programa usa
-para buscar os imóveis.
+Eles criam o ambiente isolado (`.venv`), instalam as bibliotecas e baixam o navegador
+usado na busca.
 
-> **Observação (Mac):** se o `pip install` der erro, pode ser por causa do Python 3.14.
-> Instale o **Python 3.13** e refaça os passos. (Alternativa avançada: usar a ferramenta
-> `uv` no lugar do `venv`/`pip`.)
+> Se o `pip install` der erro, provavelmente o `python3` da sua máquina é a versão 3.14,
+> que ainda não funciona aqui. Instale o **Python 3.13** e refaça os passos usando
+> `python3.13 -m venv .venv`. (O atalho já resolve isso sozinho: ele procura uma versão
+> compatível entre as instaladas.)
 
----
+### No dia a dia
 
-## O jeito mais fácil de usar (atalho clicável)
-
-Depois de instalar (acima), você não precisa mais abrir o terminal nem digitar comandos.
-Há um atalho que faz tudo por você — é só dar **duplo-clique**:
-
-- **Mac**: `iniciar.command` (no Finder)
-- **Windows**: `iniciar.bat` (no Explorer)
-
-Ele pergunta o que você quer fazer:
-
-- **A) Buscar imóveis** — atualiza os preços na internet e depois abre o relatório.
-- **B) Ver o relatório** — abre direto, com os dados que já tem.
-
-Em seguida o navegador abre sozinho com o relatório. Para parar, volte à janela preta
-(terminal) que ficou aberta e aperte **Ctrl + C** (ou simplesmente feche a janela).
-
-> Na primeira vez no Mac, pode ser que o `iniciar.command` não abra com duplo-clique por
-> segurança do sistema. Clique nele com o **botão direito → Abrir** uma vez; depois passa
-> a funcionar normalmente.
-
----
-
-## Usando pelos comandos (alternativa ao atalho)
-
-Se preferir rodar pelo terminal, primeiro **ative o ambiente** (o mesmo comando de
-ativação da instalação): `.venv\Scripts\activate` no Windows ou
-`source .venv/bin/activate` no Mac.
-
-No dia a dia, são dois passos:
+Com o ambiente **ativado** (`source .venv/bin/activate` no Mac, `.venv\Scripts\activate`
+no Windows), são dois passos:
 
 **1. Buscar os imóveis** (atualiza os preços):
 
@@ -225,4 +218,7 @@ um pode ser ligado ou desligado.
 - `geo.py` — descobre as coordenadas dos endereços e calcula a distância
 - `amenities.py` — carrega a lista de amenidades (definida na tabela `amenidades` do banco)
 - `database.py` — cuida do banco de dados (o arquivo `moradia.db`)
-- `iniciar.command` / `iniciar.bat` — atalhos clicáveis (Mac / Windows)
+- `start.py` — o que o atalho executa: prepara o ambiente na primeira vez, pergunta A ou B
+  e chama `collect.py` / `app.py`
+- `iniciar.command` / `iniciar.cmd` — atalhos clicáveis (Mac / Windows); ambos apenas
+  chamam o `start.py`
