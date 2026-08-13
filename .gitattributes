@@ -1,0 +1,8 @@
+# O lançador do Windows precisa de quebra de linha CRLF: com LF, o cmd.exe interpreta as
+# linhas em posições erradas e o atalho quebra ("'oto' não é reconhecido...").
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Os lançadores de Mac e Linux precisam de LF.
+*.command text eol=lf
+*.sh text eol=lf
