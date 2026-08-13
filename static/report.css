@@ -175,12 +175,10 @@ th, td {
   border-bottom: 1px solid var(--border-row);
   text-align: left;
 }
-/* Total (4a col), Dist. (5a), Tempo shopping (6a), Estação (7a) e Área (9a) nao quebram o texto */
+/* Total (4a col), Estação (5a) e Área (7a) nao quebram o texto */
 td:nth-child(4),
 td:nth-child(5),
-td:nth-child(6),
-td:nth-child(7),
-td:nth-child(9) {
+td:nth-child(7) {
   white-space: nowrap;
 }
 /* Ao rolar ate uma linha (clique no pin), reserva o espaco do mapa + cabecalho
@@ -275,7 +273,7 @@ tr.flash td {
 }
 
 /* === Extras e amenidades === */
-/* coluna "Extras": icones de mobilia/andar/pet/vaga, so quando positivo */
+/* coluna "Extras": icones de mobilia/andar/amenidades, so quando positivo */
 .extras {
   white-space: nowrap;
   font-size: 14px;

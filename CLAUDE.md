@@ -1,8 +1,8 @@
 # moradia — instruções para o Claude
 
-**Projeto concluído.** MVP pessoal: busca imóveis para alugar perto do Shopping
-Morumbi, salva num SQLite local (`moradia.db`) e mostra um relatório com mapa e
-ranking de custo-benefício. Rodando só no Mac do Bruno.
+**Projeto concluído.** MVP pessoal: busca imóveis para alugar perto do MASP
+(ponto de referência em `config.py`), salva num SQLite local (`moradia.db`) e mostra
+um relatório com mapa e ranking de custo-benefício. Rodando só no Mac do usuário.
 
 Não proponha refatoração, nova feature ou "melhoria" por conta própria — o escopo
 está fechado. Só mexa no código quando eu pedir uma mudança específica (bug, ajuste

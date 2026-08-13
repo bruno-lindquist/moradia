@@ -59,7 +59,6 @@ def _rental_dict(connection, property):
         "distance_km": property["distance_km"],
         "bedrooms": property["bedrooms"],
         "area_m2": round(property["area_m2"]),
-        "parking": property.get("parking") or 0,
         "furnished": property.get("furnished"),
         "floor": property.get("floor"),
         "accepts_pet": property.get("accepts_pet"),
@@ -68,10 +67,8 @@ def _rental_dict(connection, property):
         "url": config.clean_url(property["url"]),
         "lat": property["latitude"],
         "lon": property["longitude"],
-        # tempo ate o shopping em minutos (None = ainda nao calculado por commute.py)
-        "walk_min": _to_minutes(property.get("walk_seconds")),
-        "bike_min": _to_minutes(property.get("bike_seconds")),
         # tempo a pe ate a estacao de metro/trem mais proxima, e o nome dela
+        # (None = ainda nao calculado por commute.py)
         "station_min": _to_minutes(property.get("station_seconds")),
         "station_name": property.get("station_name"),
         "change": ranking.price_change(connection, property["id"]),

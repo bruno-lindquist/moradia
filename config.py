@@ -1,10 +1,10 @@
 # Configuracoes centrais do MVP. Tudo que voce pode querer ajustar fica aqui.
 
-# Coordenadas do Shopping Morumbi (Av. Roque Petroni Jr, 1089, Sao Paulo).
-# Validar na 1a execucao; se a distancia parecer errada, conferir aqui.
-REFERENCE_NAME = "Shopping Morumbi"
-REFERENCE_LAT = -23.6235
-REFERENCE_LON = -46.6997
+# Coordenadas do MASP (Av. Paulista, 1578, Sao Paulo): ponto de referencia de onde as
+# distancias sao medidas. Validar na 1a execucao; se a distancia parecer errada, conferir aqui.
+REFERENCE_NAME = "MASP"
+REFERENCE_LAT = -23.5611
+REFERENCE_LON = -46.6558
 
 # URLs de busca do QuintoAndar.
 # O QuintoAndar busca por bairro (nao por rua), e bairro + filtros vao na propria URL.
@@ -18,7 +18,7 @@ REFERENCE_LON = -46.6997
 # Necessario porque o QuintoAndar mistura imoveis "recomendados" fora do filtro
 # (search_results_flexible) quando a busca e restritiva. Mantenha em sincronia com RENT_FILTERS.
 PRICE_MIN = 500
-PRICE_MAX = 3400
+PRICE_MAX = 3000
 AREA_MIN = 10
 AREA_MAX = 50
 

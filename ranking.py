@@ -4,15 +4,15 @@
 # Score de custo-beneficio = SOMA DE PONTOS com faixas FIXAS (0 a MAX_SCORE, maior = melhor).
 # As faixas sao fixas (nao dependem dos outros imoveis), entao o score de um imovel nao
 # muda quando outro entra/sai da lista -- da pra comparar o ranking de dias diferentes.
-#   - preco        (35 pts) -> faixa R$ 1.800 (cheio) a R$ 3.200 (zero); mais barato pontua mais
-#   - distancia    (35 pts) -> faixa 0,3 km (cheio) a 3 km (zero); mais perto pontua mais
+#   - preco        (35 pts) -> faixa R$ 1.800 (cheio) a R$ 3.000 (zero); mais barato pontua mais
+#   - metro        (35 pts) -> faixa 5 min (cheio) a 25 min (zero) a pe ate a estacao de
+#     metro/trem mais proxima; mais perto pontua mais. Calculado pelo commute.py.
 #   - mobiliado    (10 pts) -> ponto cheio se for mobiliado
-#   - vaga          (6 pts) -> ponto cheio se tiver 1+ vaga de garagem
 #   - andar 4o+     (3 pts) -> ponto cheio se o andar for 4o ou acima
 #   - nota manual   (5 pts) -> sua avaliacao de 1 a 5 estrelas (normalizada)
 #   - amenidades manuais (piscina, academia, sauna, cama, fogao, ...) -> pontos definidos
 #     na fonte unica amenities.AMENITIES (campo "points"); ponto cheio se marcado "tem".
-# Imoveis ATIVOS fora da faixa (preco ou distancia) sao ELIMINADOS do ranking.
+# Imoveis ATIVOS fora da faixa (preco ou tempo ate a estacao) sao ELIMINADOS do ranking.
 # "aceita pet" e "bicicletario" sao apenas EXIBIDOS na tabela; nao entram no score
 # (bicicletario tem points=0 na fonte unica).
 
@@ -22,24 +22,22 @@ import database
 
 # Faixas fixas: o limite "bom" da pontos cheios, o limite "ruim" da zero.
 PRICE_MIN = 1800            # custo mensal (R$) -> pontuacao cheia
-PRICE_MAX = 3200            # custo mensal (R$) -> zero pontos / acima disso elimina
-DISTANCE_MIN = 0.3          # km do shopping -> pontuacao cheia
-DISTANCE_MAX = 3.0          # km do shopping -> zero pontos / acima disso elimina
+PRICE_MAX = 3000            # custo mensal (R$) -> zero pontos / acima disso elimina
+STATION_MIN_MINUTES = 5     # min a pe ate a estacao -> pontuacao cheia
+STATION_MAX_MINUTES = 25    # min a pe ate a estacao -> zero pontos / acima disso elimina
 
 # Pontos dos criterios com logica propria (faixa fixa, flag). Os pontos das amenidades
 # manuais (piscina, academia, sauna, cama, ...) vem da fonte unica amenities.AMENITIES.
 POINTS_PRICE = 35
-POINTS_DISTANCE = 35
+POINTS_STATION = 35
 POINTS_FURNISHED = 10
-POINTS_PARKING = 6
 POINTS_FLOOR = 3          # andar 4o ou acima
 POINTS_RATING = 5         # nota manual de 1 a 5 (sua avaliacao)
 
 # Score maximo possivel: criterios especiais + soma dos pontos das amenidades (fonte unica).
 # Calculado (nao escrito a mao) para nao desencontrar quando um peso muda.
 MAX_SCORE = (
-    POINTS_PRICE + POINTS_DISTANCE + POINTS_FURNISHED + POINTS_PARKING
-    + POINTS_FLOOR + POINTS_RATING
+    POINTS_PRICE + POINTS_STATION + POINTS_FURNISHED + POINTS_FLOOR + POINTS_RATING
     + sum(amenity["points"] for amenity in amenities.AMENITIES)
 )
 
@@ -77,7 +75,7 @@ def load_properties(connection, operation, include_inactive=False):
         f"""
         SELECT id, titulo, endereco, area_m2, quartos, vagas, distancia_km, url,
                latitude, longitude, nota, mobiliado, andar, aceita_pet, ativo,
-               walk_seconds, bike_seconds, estacao_segundos, estacao_nome, {amenity_columns}
+               estacao_segundos, estacao_nome, {amenity_columns}
         FROM imoveis
         WHERE operacao = ?
           {active_filter}
@@ -112,8 +110,6 @@ def load_properties(connection, operation, include_inactive=False):
             "floor": row["andar"],
             "accepts_pet": row["aceita_pet"],
             "active": row["ativo"],
-            "walk_seconds": row["walk_seconds"],
-            "bike_seconds": row["bike_seconds"],
             "station_seconds": row["estacao_segundos"],
             "station_name": row["estacao_nome"],
             "price": value,
@@ -133,16 +129,26 @@ def load_properties(connection, operation, include_inactive=False):
 
 def _fixed_fraction(value, best, worst):
     # Mapeia value para 0..1 numa faixa FIXA: best -> 1.0, worst -> 0.0.
-    # Trava (clamp) em 0..1. Funciona com best < worst (preco/distancia: menor e melhor).
+    # Trava (clamp) em 0..1. Funciona com best < worst (preco/estacao: menor e melhor).
     fraction = (worst - value) / (worst - best)
     return max(0.0, min(1.0, fraction))
 
 
+def station_minutes(property):
+    # Tempo a pe ate a estacao em minutos. None quando o commute.py ainda nao calculou
+    # (imovel recem-coletado) ou quando a rota falhou.
+    seconds = property.get("station_seconds")
+    return None if seconds is None else seconds / 60
+
+
 def within_range(property):
-    # True se o imovel esta dentro das faixas de preco E distancia (custo-beneficio aceitavel).
+    # True se o imovel esta dentro das faixas de preco E de tempo ate a estacao.
+    # Sem tempo calculado nao elimina: senao todo imovel recem-coletado sumiria do
+    # relatorio ate o commute.py passar por ele.
+    minutes = station_minutes(property)
     return (
         PRICE_MIN <= property["cost"] <= PRICE_MAX
-        and DISTANCE_MIN <= property["distance_km"] <= DISTANCE_MAX
+        and (minutes is None or minutes <= STATION_MAX_MINUTES)
     )
 
 
@@ -153,17 +159,21 @@ def compute_scores(properties):
     for property in properties:
         # bonus: 1 ponto cheio se atende, 0 se nao atende/desconhecido
         bonus_furnished = 1 if property.get("furnished") == 1 else 0
-        bonus_parking = 1 if (property.get("parking") or 0) >= 1 else 0
         floor = property.get("floor")
         bonus_floor = 1 if (floor is not None and floor >= MIN_GOOD_FLOOR) else 0
         # nota manual (1..5) normalizada para 0..1; sem nota (0) nao soma nada.
         # nota -1 = "visto" (apenas marcacao, sem estrela) tambem nao soma -> trata como 0.
         bonus_rating = max(0, property.get("rating") or 0) / 5
+        # sem tempo ate a estacao calculado -> zero pontos neste criterio (nao elimina)
+        minutes = station_minutes(property)
+        fraction_station = (
+            0.0 if minutes is None
+            else _fixed_fraction(minutes, STATION_MIN_MINUTES, STATION_MAX_MINUTES)
+        )
         score = (
             POINTS_PRICE * _fixed_fraction(property["cost"], PRICE_MIN, PRICE_MAX)
-            + POINTS_DISTANCE * _fixed_fraction(property["distance_km"], DISTANCE_MIN, DISTANCE_MAX)
+            + POINTS_STATION * fraction_station
             + POINTS_FURNISHED * bonus_furnished
-            + POINTS_PARKING * bonus_parking
             + POINTS_FLOOR * bonus_floor
             + POINTS_RATING * bonus_rating
         )
@@ -199,9 +209,11 @@ def _print_ranking(connection, title, properties):
         return
     for position, property in enumerate(properties, start=1):
         change = price_change(connection, property["id"])
+        minutes = station_minutes(property)
+        station = f"{minutes:.0f} min da estacao" if minutes is not None else "estacao nao calculada"
         print(
             f"\n#{position}  score {property['score']}  |  R$ {property['price']:,.0f}"
-            f"  ({property['price_per_m2']:.0f}/m2)  |  {property['distance_km']} km do shopping  |  {change}"
+            f"  ({property['price_per_m2']:.0f}/m2)  |  {station}  |  {change}"
         )
         print(f"     {property['bedrooms']} quarto(s), {property['area_m2']:.0f} m2, {property.get('parking') or 0} vaga(s)")
         if property["address"]:

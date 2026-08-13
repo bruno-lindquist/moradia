@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Moradia perto do Shopping Morumbi</title>
+  <title>Moradia perto do MASP</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <!-- Plugin de clustering: agrupa pins proximos num circulo com a contagem -->
@@ -20,7 +20,6 @@
 <body>
   <!-- Filtros client-side: estreitam a lista e os pins sem recarregar a pagina -->
   <div class="filters">
-    <label><input type="checkbox" id="f-parking">Com vaga</label>
     <label><input type="checkbox" id="f-furnished">Só mobiliado</label>
     <label><input type="checkbox" id="f-rated"> Só com nota</label>
     <label><input type="checkbox" id="f-hide-seen"> Esconder vistos</label>
@@ -40,10 +39,9 @@
   <table id="table">
     <thead>
       <tr>
-        <th></th><th>#</th><th>Score</th><th>Total</th><th>Dist.</th>
-        <th title="Tempo a pé · de bike até o shopping">🚶🚴</th>
+        <th></th><th>#</th><th>Score</th><th>Total</th>
         <th title="Tempo a pé até a estação de metrô/trem mais próxima">🚇</th>
-        <th>Qt.</th><th>Área</th><th></th><th></th><th></th>
+        <th>Qt.</th><th>Área</th><th></th><th></th>
         {% for amenity in amenities %}<th title="{{ amenity.label }}">{{ amenity.icon }}</th>{% endfor %}
         <th></th><th style="width: 250px;">Endereço</th><th>Cód.</th><th></th>
       </tr>
@@ -52,9 +50,9 @@
   </table>
 
   <p class="footer">
-    Ordenado por custo-benefício (soma de pontos, máx. {{ max_score }}: preço + distância +
-    mobiliado + vaga + andar + nota + amenidades). Clique num cabeçalho para reordenar.
-    Colunas de ícone: 🅿️ vaga · 🛋️ mobiliado · ↑ andar 4º+.
+    Ordenado por custo-benefício (soma de pontos, máx. {{ max_score }}: preço + metrô +
+    mobiliado + andar + nota + amenidades). Clique num cabeçalho para reordenar.
+    Colunas de ícone: 🛋️ mobiliado · ↑ andar 4º+.
     Gerado de moradia.db — rode <code>python collect.py</code> para atualizar.
   </p>
 

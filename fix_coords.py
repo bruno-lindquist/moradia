@@ -3,7 +3,7 @@
 #  - se o anuncio saiu do ar, marca o imovel como inativo (ativo = 0) e para por aqui;
 #  - se continua no ar, grava um snapshot do valor atual e atualiza a coordenada exata
 #    fornecida pelo QuintoAndar (mais precisa que geocodificar pelo nome da rua),
-#    a distancia e os tempos a pe/bike no banco.
+#    a distancia e o tempo a pe ate a estacao no banco.
 # Rode com:  python fix_coords.py
 #
 # Por que existe: enderecos sem numero (a maioria, pois o site nao expoe o numero)
@@ -66,21 +66,19 @@ def fix_one(connection, page, property):
         return "inalterado"
 
     distance_km = geo.distance_to_reference(latitude, longitude)
-    walk_seconds, bike_seconds, station_seconds, station_name = commute.route_times(latitude, longitude)
+    station_seconds, station_name = commute.station_time(latitude, longitude)
     connection.execute(
         """
         UPDATE imoveis
-        SET latitude = ?, longitude = ?, distancia_km = ?, walk_seconds = ?, bike_seconds = ?,
+        SET latitude = ?, longitude = ?, distancia_km = ?,
             estacao_segundos = ?, estacao_nome = ?
         WHERE id = ?
         """,
-        (latitude, longitude, distance_km, walk_seconds, bike_seconds,
-         station_seconds, station_name, property["id"]),
+        (latitude, longitude, distance_km, station_seconds, station_name, property["id"]),
     )
     connection.commit()  # grava a cada imovel: se falhar no meio, nao perde o feito
     print(f"      coord {old['latitude']:.5f},{old['longitude']:.5f} -> {latitude:.5f},{longitude:.5f}"
-          f" | {distance_km} km | a pe {(walk_seconds or 0)//60} min | bike {(bike_seconds or 0)//60} min"
-          f" | estacao {(station_seconds or 0)//60} min ({station_name})")
+          f" | {distance_km} km | estacao {(station_seconds or 0)//60} min ({station_name})")
     return "ok"
 
 

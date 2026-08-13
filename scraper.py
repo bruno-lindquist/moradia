@@ -212,20 +212,21 @@ def open_browser():
 
 
 def scrape_neighborhood(page, slug, name, already_detailed=frozenset()):
-    # Coleta UM bairro por completo: lista (com "Ver mais") + detalhe de cada imovel.
+    # Coleta UM bairro: lista (com "Ver mais") + detalhe de cada imovel.
     # already_detailed: IDs cujos detalhes ja foram capturados -> nao reabre a pagina deles.
-    # Retorna a lista de imoveis desse bairro. O chamador (collect.py) salva no banco
-    # antes de ir para o proximo bairro, para nao perder tudo se algo falhar no meio.
+    # Gerador: entrega cada imovel assim que ele fica pronto, em vez de devolver o bairro
+    # inteiro no fim. Assim o chamador (collect.py) grava na hora e uma queda no meio do
+    # bairro (internet, Ctrl+C, bloqueio do site) nao descarta o que ja foi coletado.
     url = config.RENT_URL_TEMPLATE.format(slug=slug)
     print(f"  buscando aluguel em {name}...")
     properties = _scrape_listing(page, "aluguel", url)
 
-    to_detail = [p for p in properties if p["id"] not in already_detailed]
-    skipped = len(properties) - len(to_detail)
-    print(f"    detalhando {len(to_detail)} imoveis de {name} ({skipped} ja detalhados, pulados)...")
-    for property in to_detail:
-        _scrape_details(page, property)
-    return properties
+    skipped = sum(1 for p in properties if p["id"] in already_detailed)
+    print(f"    detalhando {len(properties) - skipped} imoveis de {name} ({skipped} ja detalhados, pulados)...")
+    for property in properties:
+        if property["id"] not in already_detailed:
+            _scrape_details(page, property)
+        yield property
 
 
 def _click_load_more(page):

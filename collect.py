@@ -10,7 +10,11 @@ import scraper
 
 
 def _save_properties(connection, properties, now):
-    # Geocodifica e grava uma lista de imoveis. Retorna (saved, new_count).
+    # Geocodifica e grava os imoveis um a um, COM COMMIT A CADA UM: o scraper entrega
+    # cada imovel assim que o coleta, e aqui ele ja vai para o disco. Se a coleta cair
+    # no meio (internet, Ctrl+C, bloqueio do site), tudo que veio antes esta gravado.
+    # 'properties' e um gerador: iterar sobre ele e o que dispara a coleta seguinte.
+    # Retorna (saved, new_count).
     saved = new_count = 0
     for property in properties:
         if property.get("price") is None:  # sem valor nao da para analisar
@@ -24,6 +28,7 @@ def _save_properties(connection, properties, now):
             new_count += 1
         database.save_property(connection, property, now)
         database.save_price(connection, property["id"], property["price"], property.get("total_price"), now)
+        connection.commit()  # grava este imovel antes de partir para o proximo
         saved += 1
     return saved, new_count
 
@@ -33,20 +38,19 @@ def main():
     now = database.now_iso()
 
     neighborhoods = database.active_neighborhoods(connection)
-    already_detailed = database.detailed_ids(connection)  # nao reabrir paginas ja capturadas
     print(f"Coletando imoveis de aluguel no QuintoAndar em {len(neighborhoods)} bairro(s)...")
-    print(f"  {len(already_detailed)} imoveis ja detalhados serao pulados.")
 
     total_saved = total_new = 0
-    # Um navegador para todos os bairros, mas salvando o banco a CADA bairro:
-    # se algo falhar no meio, o que ja foi coletado nao se perde.
+    # Um navegador para todos os bairros; a gravacao acontece imovel a imovel dentro de
+    # _save_properties, entao nao ha lote pendente para se perder se algo falhar no meio.
     with scraper.open_browser() as page:
         for slug, name in neighborhoods:
+            # Relido a cada bairro: como cada imovel ja foi commitado, o banco e a fonte
+            # atualizada de quem foi detalhado, inclusive nesta mesma run. Evita reabrir a
+            # pagina de um imovel que aparece em dois bairros vizinhos.
+            already_detailed = database.detailed_ids(connection)
             properties = scraper.scrape_neighborhood(page, slug, name, already_detailed)
             saved, new_count = _save_properties(connection, properties, now)
-            connection.commit()  # grava este bairro antes de ir para o proximo
-            # marca os detalhados nesta run para nao reabri-los se aparecerem em outro bairro
-            already_detailed.update(p["id"] for p in properties if p.get("detailed"))
             total_saved += saved
             total_new += new_count
             print(f"    {name}: {saved} imoveis salvos ({new_count} novos). [total: {total_saved}]")

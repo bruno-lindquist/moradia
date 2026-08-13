@@ -1,8 +1,8 @@
-# ENTRYPOINT 4: calcula o tempo a pe e de bicicleta de cada imovel COM NOTA ate a
-# referencia (Shopping Morumbi) e grava no banco (colunas walk_seconds/bike_seconds).
+# ENTRYPOINT 4: calcula o tempo a pe de cada imovel ate a estacao de metro/trem mais
+# proxima e grava no banco (colunas estacao_segundos/estacao_nome).
 # Rode com:  python commute.py
 #
-# Usa o OSRM publico (roteamento sobre o OpenStreetMap), um perfil para cada modo.
+# Usa o OSRM publico (roteamento a pe sobre o OpenStreetMap).
 # Processa do maior score para o menor e deduplica por localizacao: imoveis no mesmo
 # ponto (mesmo predio) geram UMA so consulta, replicada para todos do grupo.
 
@@ -17,11 +17,8 @@ import config
 import database
 import ranking
 
-# OSRM publico. Cada perfil (walking/cycling) tem seu proprio host de demonstracao.
-OSRM_HOSTS = {
-    "walking": "https://routing.openstreetmap.de/routed-foot",
-    "cycling": "https://routing.openstreetmap.de/routed-bike",
-}
+# OSRM publico, perfil a pe (host de demonstracao do OpenStreetMap).
+OSRM_WALK_HOST = "https://routing.openstreetmap.de/routed-foot"
 REQUEST_PAUSE_SECONDS = 1.0  # boa cidadania com o servidor publico
 
 # Estacoes de metro/CPTM (mesmo arquivo que o mapa usa). Carregado uma vez no modulo.
@@ -48,18 +45,17 @@ def nearest_station(latitude, longitude):
     )
 
 
-def _route_seconds(profile, origin_lat, origin_lon, dest_lat, dest_lon):
-    # Consulta o OSRM e retorna a duracao (segundos) da rota origem -> destino.
+def _walk_seconds(origin_lat, origin_lon, dest_lat, dest_lon):
+    # Consulta o OSRM e retorna a duracao (segundos) da caminhada origem -> destino.
     # Retorna None se a rota nao for encontrada ou a requisicao falhar.
-    host = OSRM_HOSTS[profile]
     # OSRM espera lon,lat (nao lat,lon) e a ordem origem;destino.
     coordinates = f"{origin_lon},{origin_lat};{dest_lon},{dest_lat}"
-    url = f"{host}/route/v1/{profile}/{coordinates}?overview=false"
+    url = f"{OSRM_WALK_HOST}/route/v1/walking/{coordinates}?overview=false"
     try:
         with urllib.request.urlopen(url, timeout=30) as response:
             data = json.load(response)
     except (urllib.error.URLError, TimeoutError, ValueError) as error:
-        print(f"      ! falha no OSRM ({profile}): {error}")
+        print(f"      ! falha no OSRM: {error}")
         return None
     routes = data.get("routes") or []
     if not routes:
@@ -67,79 +63,65 @@ def _route_seconds(profile, origin_lat, origin_lon, dest_lat, dest_lon):
     return round(routes[0]["duration"])
 
 
-def route_times(latitude, longitude):
-    # Tempos (segundos) a partir do imovel, com pausa entre as consultas (boa cidadania
-    # com o OSRM publico). Retorna (walk_seconds, bike_seconds, station_seconds, station_name):
-    #   - walk/bike: a pe e de bike ate a referencia (shopping)
-    #   - station:   a pe ate a estacao de metro/trem mais proxima (linha reta escolhe qual)
-    # Qualquer tempo pode ser None se a rota nao for encontrada.
-    reference = (config.REFERENCE_LAT, config.REFERENCE_LON)
-    walk = _route_seconds("walking", latitude, longitude, *reference)
-    time.sleep(REQUEST_PAUSE_SECONDS)
-    bike = _route_seconds("cycling", latitude, longitude, *reference)
-    time.sleep(REQUEST_PAUSE_SECONDS)
+def station_time(latitude, longitude):
+    # Tempo (segundos) a pe ate a estacao de metro/trem mais proxima, e o nome dela.
+    # A estacao e escolhida em linha reta; so para ela consultamos a rota real.
+    # A pausa e boa cidadania com o OSRM publico. O tempo pode ser None se a rota falhar.
     station_name, station_lat, station_lon = nearest_station(latitude, longitude)
-    station = _route_seconds("walking", latitude, longitude, station_lat, station_lon)
+    seconds = _walk_seconds(latitude, longitude, station_lat, station_lon)
     time.sleep(REQUEST_PAUSE_SECONDS)
-    return walk, bike, station, station_name
+    return seconds, station_name
 
 
 def _properties_to_process(connection):
-    # Imoveis com nota (>=1), ordenados por score desc, que ainda nao tem os dois tempos.
-    # compute_scores ja ordena por score decrescente.
+    # Todos os imoveis com coordenada, do maior score para o menor
+    # (compute_scores ja ordena por score decrescente).
     properties = ranking.compute_scores(
         ranking.load_properties(connection, "aluguel", include_inactive=True)
     )
-    pending = []
-    for property in properties:
-        if (property.get("rating") or 0) < 1:
-            continue
-        if property["latitude"] is None or property["longitude"] is None:
-            continue
-        pending.append(property)
-    return pending
+    return [
+        property
+        for property in properties
+        if property["latitude"] is not None and property["longitude"] is not None
+    ]
 
 
-def _existing_times(connection, property_id):
+def _existing_station_seconds(connection, property_id):
     row = connection.execute(
-        "SELECT walk_seconds, bike_seconds, estacao_segundos FROM imoveis WHERE id = ?",
-        (property_id,),
+        "SELECT estacao_segundos FROM imoveis WHERE id = ?", (property_id,)
     ).fetchone()
-    return (row["walk_seconds"], row["bike_seconds"], row["estacao_segundos"])
+    return row["estacao_segundos"]
 
 
 def main():
     connection = database.connect()
 
     properties = _properties_to_process(connection)
-    print(f"{len(properties)} imovel(is) com nota para processar (maior score primeiro).")
+    print(f"{len(properties)} imovel(is) para processar (maior score primeiro).")
 
     # Agrupa por localizacao arredondada: mesma coordenada = uma consulta so.
-    cache = {}  # (lat, lon) -> (walk_seconds, bike_seconds, station_seconds, station_name)
+    cache = {}  # (lat, lon) -> (station_seconds, station_name)
     api_calls = 0
 
     for property in properties:
-        walk, bike, station = _existing_times(connection, property["id"])
-        if walk is not None and bike is not None and station is not None:
-            continue  # ja calculado (inclusive estacao): nao regasta a API
+        if _existing_station_seconds(connection, property["id"]) is not None:
+            continue  # ja calculado: nao regasta a API
 
         location = (round(property["latitude"], 6), round(property["longitude"], 6))
         if location not in cache:
             print(f"  score {property['score']:5} | {property['address'] or property['id']}")
-            walk_seconds, bike_seconds, station_seconds, station_name = route_times(*location)
-            api_calls += 3  # a pe, bike e ate a estacao
-            cache[location] = (walk_seconds, bike_seconds, station_seconds, station_name)
-            if walk_seconds is not None:
-                print(f"      a pe {walk_seconds // 60} min | bike {(bike_seconds or 0) // 60} min "
-                      f"| estacao {(station_seconds or 0) // 60} min ({station_name})")
+            cache[location] = station_time(*location)
+            api_calls += 1
+            seconds, name = cache[location]
+            if seconds is not None:
+                print(f"      estacao {seconds // 60} min ({name})")
         else:
-            walk_seconds, bike_seconds, station_seconds, station_name = cache[location]
             print(f"  score {property['score']:5} | mesma localizacao -> reaproveita (sem nova consulta)")
+        station_seconds, station_name = cache[location]
 
         connection.execute(
-            "UPDATE imoveis SET walk_seconds = ?, bike_seconds = ?, "
-            "estacao_segundos = ?, estacao_nome = ? WHERE id = ?",
-            (walk_seconds, bike_seconds, station_seconds, station_name, property["id"]),
+            "UPDATE imoveis SET estacao_segundos = ?, estacao_nome = ? WHERE id = ?",
+            (station_seconds, station_name, property["id"]),
         )
         connection.commit()  # grava a cada imovel: se falhar no meio, nao perde o feito
 

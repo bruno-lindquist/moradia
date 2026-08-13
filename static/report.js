@@ -113,7 +113,7 @@ function popup(property, position) {
     : 'R$ ' + property.price.toLocaleString('pt-BR') + ' aluguel';
   const furnished = property.furnished === 1 ? ' · mobiliado'
                   : property.furnished === 0 ? ' · sem mobília' : '';
-  const floor = property.floor != null ? ' · ' + property.floor + 'º andar' : '';
+  const floor = property.floor != null ? property.floor + 'º andar' : '';
   // amenidades presentes (so as marcadas como "tem" = 1), derivadas da fonte unica
   const present = AMENITIES
     .filter(function (amenity) { return property[amenity.key] === 1; })
@@ -122,9 +122,9 @@ function popup(property, position) {
   // entram quando ha dado, para a lista nao ficar com itens vazios.
   const items = [
     total + ' (' + property.price_per_m2 + '/m²)',
-    property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m², ' + property.parking + ' vaga(s)' + furnished,
-    property.distance_km + ' km do shopping' + floor,
+    property.bedrooms + ' quarto(s), ' + property.area_m2 + ' m²' + furnished,
   ];
+  if (floor) items.push(floor);
   if (property.station_min != null) {
     items.push('🚇 ' + property.station_min + '′ até ' + (property.station_name || 'a estação'));
   }
@@ -149,20 +149,6 @@ function shortAddress(address) {
     .replace(/\bProfessor\b/gi, 'Prof')
 
     .replace(/\bVila\b/gi, 'Vl');
-}
-
-// Celula de tempo ate o shopping: "19′ · 6′" (a pe · bike). Vazia quando ainda
-// nao calculado (commute.py nao rodou para este imovel). Ordena pelo tempo a pe;
-// nao calculados (Infinity) vao para o fim ao ordenar.
-function commuteCell(walkMin, bikeMin) {
-  const td = document.createElement('td');
-  td.className = 'extras';
-  if (walkMin != null) {
-    td.textContent = walkMin + '′ · ' + (bikeMin != null ? bikeMin + '′' : '–');
-    td.title = 'A pé ' + walkMin + ' min · de bike ' + (bikeMin != null ? bikeMin + ' min' : '?');
-  }
-  td.dataset.value = walkMin != null ? walkMin : Infinity;
-  return td;
 }
 
 // Celula da estacao mais proxima: mostra so o tempo a pe ("8′"); o nome da estacao
@@ -239,7 +225,6 @@ function normalize(text) {
 
 // Aplica os filtros (checkboxes) sobre a lista completa. Retorna so o que passa.
 function getFiltered() {
-  const onlyParking = document.getElementById('f-parking').checked;
   const onlyFurnished = document.getElementById('f-furnished').checked;
   const onlyRated = document.getElementById('f-rated').checked;
   const hideSeen = document.getElementById('f-hide-seen').checked;
@@ -256,7 +241,6 @@ function getFiltered() {
   const filtered = DATA.rentals.filter(function (property) {
     const isHidden = property.active === 0;
     if (onlyHidden ? !isHidden : isHidden) return false;
-    if (onlyParking && !(property.parking >= 1)) return false;
     if (onlyFurnished && property.furnished !== 1) return false;
     if (onlyRated && !(property.rating >= 1)) return false;
     if (hideSeen && property.rating === -1) return false;
@@ -342,13 +326,10 @@ function render() {
     const totalText = property.total_price != null
       ? 'R$ ' + property.total_price.toLocaleString('pt-BR') : '—';
     tr.appendChild(cell(totalText, property.total_price != null ? property.total_price : 0));
-    tr.appendChild(cell(property.distance_km + ' km', property.distance_km));
-    tr.appendChild(commuteCell(property.walk_min, property.bike_min));
     tr.appendChild(stationCell(property.station_min, property.station_name));
     tr.appendChild(cell(property.bedrooms, property.bedrooms));
     tr.appendChild(cell(property.area_m2 + ' m²', property.area_m2));
-    // Extras em colunas separadas (sem titulo no cabecalho), so o icone quando positivo
-    tr.appendChild(extraCell('🅿️', property.parking + ' vaga(s)', property.parking >= 1, property.parking));
+    // Extras em colunas separadas (sem titulo no cabecalho), so o icone quando positivo.
     // Mobiliado: marcavel manualmente (botao direito), igual as amenidades
     tr.appendChild(amenityCell(property, 'furnished', '🛋️', 'Mobiliado'));
     const goodFloor = property.floor != null && property.floor >= 4;

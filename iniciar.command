@@ -18,7 +18,7 @@ if [ ! -x "$PYTHON" ]; then
   exit 1
 fi
 
-echo "🏠 Moradia perto do Shopping Morumbi"
+echo "🏠 Moradia perto do MASP"
 echo ""
 echo "O que voce quer fazer?"
 echo "  A) Buscar imoveis (atualiza os precos na internet e depois abre o relatorio)"

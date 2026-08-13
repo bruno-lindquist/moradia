@@ -1,6 +1,6 @@
-# 🏠 Moradia perto do Shopping Morumbi
+# 🏠 Moradia perto do MASP
 
-Um programa que procura apartamentos para **alugar** perto do Shopping Morumbi (São Paulo),
+Um programa que procura apartamentos para **alugar** perto do MASP (Avenida Paulista, São Paulo),
 organiza tudo num banco de dados e mostra um **relatório com mapa**, já indicando os
 imóveis com melhor **custo-benefício**.
 
